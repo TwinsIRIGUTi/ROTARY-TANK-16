@@ -354,8 +354,9 @@
 
         let gameState = 'TITLE';
         let currentStage = 1;
-        let maxUnlockedStageNormal = 1;
-        let maxUnlockedStageEX = 1;
+        // localStorageからクリア状況（解放済みステージ）を取得（未保存の場合は1）
+        let maxUnlockedStageNormal = parseInt(localStorage.getItem('rotary_tank_max_stage_normal') || '1', 10);
+        let maxUnlockedStageEX = parseInt(localStorage.getItem('rotary_tank_max_stage_ex') || '1', 10);
         let isEXMode = false;
         let exUnlocked = localStorage.getItem('rotary_tank_ex_unlocked') === 'true';
 
@@ -723,9 +724,15 @@
                 } else {
                     gameState = 'STAGE_CLEAR';
                     if (!isEXMode) {
-                        if (currentStage === maxUnlockedStageNormal) maxUnlockedStageNormal++;
+                        if (currentStage === maxUnlockedStageNormal) {
+                            maxUnlockedStageNormal++;
+                            localStorage.setItem('rotary_tank_max_stage_normal', maxUnlockedStageNormal.toString());
+                        }
                     } else {
-                        if (currentStage === maxUnlockedStageEX) maxUnlockedStageEX++;
+                        if (currentStage === maxUnlockedStageEX) {
+                            maxUnlockedStageEX++;
+                            localStorage.setItem('rotary_tank_max_stage_ex', maxUnlockedStageEX.toString());
+                        }
                     }
                     buildStageSelectMenu();
                     showOverlayWithMessage(`STAGE ${currentStage} CLEAR!`, 'ALL ENEMIES DESTROYED', 'NEXT STAGE', () => {
