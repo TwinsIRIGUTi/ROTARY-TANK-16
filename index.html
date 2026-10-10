@@ -74,7 +74,6 @@
             border-color: #b794f4;
         }
 
-        /* Dynamic On-Screen Touch Joystick Visual */
         #touch-joystick-base {
             width: 100px;
             height: 100px;
@@ -100,7 +99,6 @@
             pointer-events: none;
         }
 
-        /* EX Mode Theme Override */
         .ex-mode-active #hud {
             border-color: #9f7aea;
             background-color: #1a0933;
@@ -112,7 +110,6 @@
 </head>
 <body id="main-body" class="flex flex-col items-center justify-between h-screen w-screen overflow-hidden bg-slate-950 p-2 select-none">
 
-    <!-- HUD Header -->
     <div id="hud" class="w-full max-w-md bg-slate-900 border-4 border-slate-700 rounded-lg px-2 py-1.5 flex justify-between items-center text-xs text-yellow-400 z-20 shadow-lg gap-1 transition-colors duration-300">
         <div class="flex flex-col">
             <span id="hud-mode-label" class="text-[7px] text-gray-400">NORMAL MODE</span>
@@ -138,11 +135,9 @@
         </div>
     </div>
 
-    <!-- Main Game View Canvas -->
     <div id="game-container" class="relative w-full max-w-md aspect-square my-auto bg-black rounded-lg border-4 border-slate-800 overflow-hidden shadow-2xl scanlines transition-colors duration-300">
         <canvas id="gameCanvas" class="w-full h-full pixel-art block"></canvas>
 
-        <!-- Dynamic Touch Joystick Overlay -->
         <div id="touch-joystick-base">
             <div id="touch-joystick-knob"></div>
         </div>
@@ -154,8 +149,8 @@
             </h1>
             <p id="title-tagline" class="text-[9px] text-cyan-300 mb-3 tracking-widest">SFC 16-BIT RETRO ACTION</p>
             <p id="title-desc" class="text-[8px] text-gray-300 mb-4 leading-relaxed max-w-xs">
-                画面内どこでもタップ＆スライド操作！<br>
-                砲塔自動回転＆自動発射のクセを見極めよ！
+                画面内どこでもタッチ＆スライド操作！<br>
+                自動砲塔回転＆自動発射のクセを見極めよ！
             </p>
 
             <div id="mode-selector" class="flex gap-2 mb-3 hidden">
@@ -197,7 +192,6 @@
         </div>
     </div>
 
-    <!-- Quick Control Bar -->
     <div id="mobile-controls" class="w-full max-w-md flex justify-around items-center px-4 py-1.5 bg-slate-900/90 rounded-xl border-2 border-slate-800 z-20">
         <span class="text-[8px] text-gray-400">TOUCH ANYWHERE TO MOVE</span>
         <div class="flex gap-2">
@@ -227,6 +221,7 @@
 
             playShoot() {
                 if (this.muted || !this.ctx) return;
+                this.init();
                 try {
                     const now = this.ctx.currentTime;
                     const osc = this.ctx.createOscillator();
@@ -245,6 +240,7 @@
 
             playBounce() {
                 if (this.muted || !this.ctx) return;
+                this.init();
                 try {
                     const now = this.ctx.currentTime;
                     const osc = this.ctx.createOscillator();
@@ -263,6 +259,7 @@
 
             playExplode() {
                 if (this.muted || !this.ctx) return;
+                this.init();
                 try {
                     const now = this.ctx.currentTime;
                     const bufferSize = this.ctx.sampleRate * 0.3;
@@ -290,6 +287,7 @@
 
             playClear() {
                 if (this.muted || !this.ctx) return;
+                this.init();
                 const notes = isEXMode 
                     ? [329.63, 392.00, 493.88, 659.25, 783.99, 987.77]
                     : [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
@@ -314,12 +312,16 @@
             }
 
             startBGM() {
-                if (this.bgmTimer) return;
+                this.init();
+                this.stopBGM();
                 const normalBass = [110, 110, 130.81, 146.83, 110, 110, 98, 87.31];
                 const exBass = [146.83, 130.81, 110, 130.81, 146.83, 164.81, 146.83, 123.47];
                 this.bgmStep = 0;
                 this.bgmTimer = setInterval(() => {
-                    if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
+                    if (this.muted || !this.ctx) return;
+                    if (this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
                     try {
                         const now = this.ctx.currentTime;
                         const notes = isEXMode ? exBass : normalBass;
@@ -349,10 +351,21 @@
 
         const audio = new SoundEngine();
 
-        // Game Constants & Configuration
-        const GRID_SIZE = 12;
-        let canvas, ctx;
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const GRID_SIZE = 16;
         let tileSize = 32;
+
+        function resizeCanvas() {
+            const container = document.getElementById('game-container');
+            const size = container.clientWidth;
+            canvas.width = size;
+            canvas.height = size;
+            tileSize = size / GRID_SIZE;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
         const TILE = {
             EMPTY: 0,
@@ -361,102 +374,94 @@
             ICE: 3
         };
 
-        let gameState = 'TITLE';
-        let isEXMode = false;
-        let exUnlocked = false;
-
+        let gameState = 'TITLE'; // TITLE, STAGE_SELECT, PLAYING, PAUSED, STAGE_CLEAR, GAME_OVER
         let currentStage = 1;
         let maxUnlockedStageNormal = 1;
         let maxUnlockedStageEX = 1;
+        let isEXMode = false;
+        let exUnlocked = localStorage.getItem('rotary_tank_ex_unlocked') === 'true';
 
         let totalDeaths = 0;
-        let totalPlayTime = 0;
         let currentStageTime = 0;
+        let totalPlayTime = 0;
+        let stageLoading = false;
 
+        let gridMap = [];
         let player = {
             x: 0, y: 0,
-            vx: 0, vy: 0,
-            angle: 0,
-            speed: 2.2, // Restored to original speed
             radius: 12,
-            turretRotSpeed: 2.2, // Clockwise (Normal) or Counter-Clockwise (EX)
-            shootCooldown: 3.0,  // 3s (Normal), 2s (EX)
+            speed: 3.5, // Original speed restored
+            angle: 0,
+            turretRotSpeed: Math.PI * 0.75, // Clockwise for Normal, Counter-Clockwise for EX
+            shootCooldown: 3.0, // 3s Normal, 2s EX
+            bulletMaxLife: 5.0, // 5s Normal, 7s EX
             shootTimer: 0,
-            bulletMaxLife: 5.0,  // 5s (Normal), 7s (EX)
+            vx: 0, vy: 0,
             alive: true
         };
+
+        let enemies = [];
+        let bullets = [];
+        let particles = [];
 
         const keys = { up: false, down: false, left: false, right: false };
         let joystickVector = { x: 0, y: 0 };
 
-        let gridMap = [];
-        let bullets = [];
-        let enemies = [];
-        let particles = [];
-        let lastTime = 0;
+        function setEXMode(ex) {
+            isEXMode = ex;
+            const body = document.getElementById('main-body');
+            const titleSub = document.getElementById('title-sub');
+            const modeLabel = document.getElementById('hud-mode-label');
 
-        function buildStageSelectMenu() {
-            const gridEl = document.getElementById('stage-grid');
-            if (!gridEl) return;
-            gridEl.innerHTML = '';
-            
-            const maxUnlocked = isEXMode ? maxUnlockedStageEX : maxUnlockedStageNormal;
-            
-            for (let i = 1; i <= 32; i++) {
-                const btn = document.createElement('button');
-                const isUnlocked = i <= maxUnlocked;
-                btn.className = `retro-btn px-2 py-2 text-[9px] font-bold text-white ${
-                    isUnlocked ? (isEXMode ? 'retro-btn-purple' : 'retro-btn-green') : 'opacity-40'
-                }`;
-                btn.innerText = `ST ${String(i).padStart(2, '0')}`;
-                btn.disabled = !isUnlocked;
-                btn.onclick = () => {
-                    if (isUnlocked) {
-                        audio.init();
-                        audio.startBGM();
-                        loadStage(i);
-                        gameState = 'PLAYING';
-                        hideAllOverlays();
-                    }
-                };
-                gridEl.appendChild(btn);
+            if (isEXMode) {
+                body.classList.add('ex-mode-active');
+                titleSub.innerText = 'EX 16';
+                modeLabel.innerText = 'EX MODE (裏面)';
+                player.turretRotSpeed = -Math.PI * 0.85; // Counter-clockwise
+                player.shootCooldown = 2.0; // 2 seconds
+                player.bulletMaxLife = 7.0; // 7 seconds
+            } else {
+                body.classList.remove('ex-mode-active');
+                titleSub.innerText = '16';
+                modeLabel.innerText = 'NORMAL MODE';
+                player.turretRotSpeed = Math.PI * 0.75; // Clockwise
+                player.shootCooldown = 3.0; // 3 seconds
+                player.bulletMaxLife = 5.0; // 5 seconds
             }
+            buildStageSelectMenu();
+        }
 
-            document.getElementById('stage-select-title').innerText = `${isEXMode ? 'EX MODE' : 'NORMAL MODE'} - SELECT STAGE (1-32)`;
+        if (exUnlocked) {
+            document.getElementById('mode-selector').classList.remove('hidden');
         }
 
         function generateStageLayout(stageNum) {
-            const map = Array(GRID_SIZE).fill(0).map(() => Array(GRID_SIZE).fill(TILE.EMPTY));
+            const map = [];
             for (let r = 0; r < GRID_SIZE; r++) {
+                const row = [];
                 for (let c = 0; c < GRID_SIZE; c++) {
                     if (r === 0 || r === GRID_SIZE - 1 || c === 0 || c === GRID_SIZE - 1) {
-                        map[r][c] = TILE.WALL_PERMANENT;
+                        row.push(TILE.WALL_PERMANENT);
+                    } else if (r % 2 === 0 && c % 2 === 0) {
+                        row.push(TILE.WALL_PERMANENT);
+                    } else {
+                        const seed = (stageNum * 31 + r * 17 + c * 13) % 100;
+                        if (seed < (25 + stageNum * 0.4)) {
+                            row.push(TILE.BLOCK_DESTRUCT);
+                        } else if (stageNum >= 9 && seed < (32 + stageNum * 0.3)) {
+                            row.push(TILE.ICE);
+                        } else {
+                            row.push(TILE.EMPTY);
+                        }
                     }
                 }
+                map.push(row);
             }
 
-            const seed = stageNum * (isEXMode ? 9999 : 1337);
-            const pseudoRandom = (offset) => {
-                const x = Math.sin(seed + offset) * 10000;
-                return x - Math.floor(x);
-            };
-
-            const isIceTheme = stageNum >= 9 && stageNum <= 16;
-            let fillRatio = (isEXMode ? 0.18 : 0.14) + (stageNum % 8) * 0.02;
-            let blockIndex = 0;
-
-            for (let r = 2; r < GRID_SIZE - 2; r++) {
-                for (let c = 2; c < GRID_SIZE - 2; c++) {
-                    if (r >= GRID_SIZE - 3 && c <= 3) continue; // Guarantee player spawn zone safety
-                    
-                    const rand = pseudoRandom(blockIndex++);
-                    if (rand < fillRatio) {
-                        map[r][c] = TILE.BLOCK_DESTRUCT;
-                    } else if (rand < fillRatio + 0.12) {
-                        map[r][c] = TILE.WALL_PERMANENT;
-                    } else if (isIceTheme && rand < fillRatio + 0.22) {
-                        map[r][c] = TILE.ICE;
-                    }
+            // Safe spawn zone clear for player
+            for (let r = GRID_SIZE - 3; r <= GRID_SIZE - 2; r++) {
+                for (let c = 1; c <= 2; c++) {
+                    map[r][c] = TILE.EMPTY;
                 }
             }
             return map;
@@ -464,121 +469,50 @@
 
         function createStageEnemies(stageNum) {
             const list = [];
-            const count = Math.min(2 + Math.floor(stageNum / 2) + (isEXMode ? 1 : 0), 7);
+            const count = Math.min(1, Math.floor(stageNum / 4) + 1) + (isEXMode ? 1 : 0);
             
-            const spawnPoints = [
-                { r: 2, c: 9 }, { r: 2, c: 5 }, { r: 4, c: 8 },
-                { r: 8, c: 9 }, { r: 3, c: 7 }, { r: 2, c: 2 }
+            const candidateSpots = [
+                { r: 2, c: 2 }, { r: 2, c: GRID_SIZE - 3 },
+                { r: Math.floor(GRID_SIZE / 2), c: Math.floor(GRID_SIZE / 2) },
+                { r: 2, c: Math.floor(GRID_SIZE / 2) }
             ];
 
             for (let i = 0; i < count; i++) {
-                const pt = spawnPoints[i % spawnPoints.length];
-                let sr = pt.r;
-                let sc = pt.c;
-                if (gridMap[sr][sc] === TILE.WALL_PERMANENT) {
-                    sr = 2; sc = 8;
-                }
-                gridMap[sr][sc] = TILE.EMPTY;
+                const spot = candidateSpots[i % candidateSpots.length];
+                
+                // Ensure spawn spot is never inside a permanent or destructible wall
+                gridMap[spot.r][spot.c] = TILE.EMPTY;
+                gridMap[spot.r + 1][spot.c] = TILE.EMPTY;
+                gridMap[spot.r][spot.c + 1] = TILE.EMPTY;
 
                 const isBoss = (stageNum % 8 === 0) && (i === 0);
-
                 list.push({
-                    x: (sc + 0.5) * tileSize,
-                    y: (sr + 0.5) * tileSize,
+                    x: (spot.c + 0.5) * tileSize,
+                    y: (spot.r + 0.5) * tileSize,
                     radius: isBoss ? 16 : 12,
-                    speed: (isBoss ? 0.7 : 0.75 + (stageNum * 0.04)) * (isEXMode ? 1.2 : 1.0),
-                    hp: (isBoss ? 4 : 1) + (isEXMode ? 1 : 0),
-                    maxHp: (isBoss ? 4 : 1) + (isEXMode ? 1 : 0),
-                    color: isEXMode ? '#9f7aea' : (isBoss ? '#e53e3e' : (i % 2 === 0 ? '#dd6b20' : '#d69e2e')),
-                    turretAngle: 0,
-                    turretRotSpeed: 1.4 * (isEXMode ? -1.5 : 1.0),
-                    shootTimer: Math.random() * 2.0,
-                    shootCooldown: Math.max(1.5, (3.2 - (stageNum * 0.04)) * (isEXMode ? 0.8 : 1.0)),
-                    vx: 0, vy: 0,
+                    speed: isBoss ? 1.2 : (1.6 + stageNum * 0.04),
+                    turretAngle: Math.random() * Math.PI * 2,
+                    turretRotSpeed: (Math.random() - 0.5) * 2.0,
+                    shootCooldown: isBoss ? 2.0 : Math.max(1.5, 3.5 - stageNum * 0.05),
+                    shootTimer: Math.random() * 2,
+                    hp: isBoss ? 5 : (1 + Math.floor(stageNum / 10)),
+                    color: isBoss ? '#9333ea' : (isEXMode ? '#dc2626' : '#d97706'),
                     changeDirTimer: 0,
+                    vx: 0, vy: 0,
                     isBoss: isBoss
                 });
             }
             return list;
         }
 
-        function initGame() {
-            canvas = document.getElementById('gameCanvas');
-            ctx = canvas.getContext('2d');
-            
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-
-            setupControls();
-            
-            // Check Local Storage for EX Unlock
-            exUnlocked = localStorage.getItem('rotary_tank_ex_unlocked') === 'true';
-            if (exUnlocked) {
-                document.getElementById('mode-selector').classList.remove('hidden');
-            }
-
-            gridMap = generateStageLayout(1);
-
-            lastTime = performance.now();
-            requestAnimationFrame(gameLoop);
-        }
-
-        function setEXMode(enabled) {
-            isEXMode = enabled;
-            const body = document.getElementById('main-body');
-            const modeLabel = document.getElementById('hud-mode-label');
-            const shotLabel = document.getElementById('hud-shot-label');
-            const subTitle = document.getElementById('title-sub');
-
-            if (isEXMode) {
-                body.classList.add('ex-mode-active');
-                modeLabel.innerText = "EX MODE (裏面)";
-                modeLabel.className = "text-[7px] text-purple-400 font-bold";
-                shotLabel.innerText = "SHOT (2s)";
-                subTitle.innerText = "16 EX";
-                subTitle.className = "text-purple-400 text-3xl font-black";
-
-                player.turretRotSpeed = -2.5; // Counter-clockwise
-                player.shootCooldown = 2.0;   // 2 second cooldown
-                player.bulletMaxLife = 7.0;   // 7 second auto-detonation
-            } else {
-                body.classList.remove('ex-mode-active');
-                modeLabel.innerText = "NORMAL MODE";
-                modeLabel.className = "text-[7px] text-gray-400";
-                shotLabel.innerText = "SHOT (3s)";
-                subTitle.innerText = "16";
-                subTitle.className = "text-red-500 text-3xl font-black";
-
-                player.turretRotSpeed = 2.2;  // Clockwise
-                player.shootCooldown = 3.0;   // 3 second cooldown
-                player.bulletMaxLife = 5.0;   // 5 second auto-detonation
-            }
-            buildStageSelectMenu();
-        }
-
-        function resizeCanvas() {
-            const container = canvas.parentElement;
-            const size = Math.min(container.clientWidth, container.clientHeight);
-            canvas.width = size;
-            canvas.height = size;
-            tileSize = size / GRID_SIZE;
-            player.radius = tileSize * 0.36;
-        }
-
         function loadStage(stageNum) {
+            stageLoading = true;
             currentStage = stageNum;
             gridMap = generateStageLayout(stageNum);
-            
-            // Safe spawn zone clear
-            for (let r = GRID_SIZE - 3; r <= GRID_SIZE - 2; r++) {
-                for (let c = 1; c <= 2; c++) {
-                    gridMap[r][c] = TILE.EMPTY;
-                }
-            }
 
-            enemies = createStageEnemies(stageNum);
             bullets = [];
             particles = [];
+            enemies = createStageEnemies(stageNum);
 
             player.x = 1.5 * tileSize;
             player.y = (GRID_SIZE - 1.5) * tileSize;
@@ -593,6 +527,10 @@
             updateHUDEnemies();
             updateHUDDeaths();
             updateHUDTime();
+
+            setTimeout(() => {
+                stageLoading = false;
+            }, 150);
         }
 
         function updateHUDEnemies() {
@@ -604,20 +542,13 @@
         }
 
         function updateHUDTime() {
-            const timeEl = document.getElementById('hud-time');
-            if (timeEl) {
-                const totalSeconds = Math.floor(currentStageTime);
-                const minutes = Math.floor(totalSeconds / 60);
-                const seconds = totalSeconds % 60;
-                timeEl.innerText = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            }
+            document.getElementById('hud-time').innerText = formatTime(currentStageTime);
         }
 
-        function formatTime(secondsInput) {
-            const totalSeconds = Math.floor(secondsInput);
-            const minutes = Math.floor(totalSeconds / 60);
-            const seconds = totalSeconds % 60;
-            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
         function showOverlay(id) {
@@ -636,166 +567,41 @@
         function showOverlayWithMessage(title, desc, btnText, callback, stats = null) {
             document.getElementById('msg-title').innerText = title;
             document.getElementById('msg-desc').innerText = desc;
-            
-            const statsBox = document.getElementById('msg-stats');
+            const btn = document.getElementById('msg-btn');
+            btn.innerText = btnText;
+            btn.onclick = callback;
+
+            const statsDiv = document.getElementById('msg-stats');
             if (stats) {
                 document.getElementById('stat-time').innerText = stats.time;
                 document.getElementById('stat-deaths').innerText = stats.deaths;
-                statsBox.classList.remove('hidden');
+                statsDiv.classList.remove('hidden');
             } else {
-                statsBox.classList.add('hidden');
+                statsDiv.classList.add('hidden');
             }
-
-            const btn = document.getElementById('msg-btn');
-            btn.innerText = btnText;
-            btn.className = `retro-btn ${isEXMode ? 'retro-btn-purple' : 'retro-btn-green'} px-6 py-3 text-[10px] font-bold text-white w-40`;
-            btn.onclick = callback || (() => {
-                hideAllOverlays();
-                gameState = 'PLAYING';
-            });
             showOverlay('message-overlay');
         }
 
-        function setupControls() {
-            document.getElementById('btn-start').onclick = () => {
-                audio.init();
-                audio.startBGM();
-                loadStage(currentStage);
-                gameState = 'PLAYING';
-                hideAllOverlays();
-            };
+        function buildStageSelectMenu() {
+            const grid = document.getElementById('stage-grid');
+            grid.innerHTML = '';
+            const maxUnlocked = isEXMode ? maxUnlockedStageEX : maxUnlockedStageNormal;
 
-            document.getElementById('btn-select-normal').onclick = () => {
-                setEXMode(false);
-            };
-            document.getElementById('btn-select-ex').onclick = () => {
-                setEXMode(true);
-            };
-
-            document.getElementById('btn-stage-select-menu').onclick = () => {
-                audio.init();
-                buildStageSelectMenu();
-                showOverlay('stage-overlay');
-            };
-
-            document.getElementById('btn-stage-back').onclick = () => {
-                showOverlay('title-overlay');
-            };
-
-            document.getElementById('btn-sound-toggle').onclick = (e) => {
-                audio.muted = !audio.muted;
-                e.target.innerText = `SOUND: ${audio.muted ? 'OFF' : 'ON'}`;
-            };
-
-            document.getElementById('btn-pause').onclick = () => {
-                if (gameState === 'PLAYING') {
-                    gameState = 'PAUSED';
-                    showOverlayWithMessage('PAUSED', 'GAME SUSPENDED', 'RESUME');
-                } else if (gameState === 'PAUSED') {
-                    gameState = 'PLAYING';
-                    hideAllOverlays();
+            for (let i = 1; i <= 32; i++) {
+                const btn = document.createElement('button');
+                btn.className = `retro-btn py-2 text-[10px] font-bold ${i <= maxUnlocked ? (isEXMode ? 'retro-btn-purple' : 'retro-btn-green') : 'opacity-50 bg-slate-800'}`;
+                btn.innerText = i;
+                if (i <= maxUnlocked) {
+                    btn.onclick = () => {
+                        audio.init();
+                        audio.startBGM();
+                        loadStage(i);
+                        gameState = 'PLAYING';
+                        hideAllOverlays();
+                    };
                 }
-            };
-
-            document.getElementById('btn-restart').onclick = () => {
-                if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAME_OVER') {
-                    loadStage(currentStage);
-                    gameState = 'PLAYING';
-                    hideAllOverlays();
-                }
-            };
-
-            window.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = true;
-                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = true;
-                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
-                if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
-            });
-
-            window.addEventListener('keyup', (e) => {
-                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = false;
-                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = false;
-                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
-                if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
-            });
-
-            // --- TOUCH ANYWHERE JOYSTICK MECHANIC ---
-            const joyBase = document.getElementById('touch-joystick-base');
-            const joyKnob = document.getElementById('touch-joystick-knob');
-            let isDragging = false;
-            let startX = 0;
-            let startY = 0;
-
-            const handleTouchStart = (clientX, clientY) => {
-                if (gameState !== 'PLAYING') return;
-                isDragging = true;
-                startX = clientX;
-                startY = clientY;
-
-                const rect = canvas.getBoundingClientRect();
-                const relativeX = clientX - rect.left;
-                const relativeY = clientY - rect.top;
-
-                joyBase.style.left = `${relativeX}px`;
-                joyBase.style.top = `${relativeY}px`;
-                joyBase.style.display = 'block';
-                joyKnob.style.transform = `translate(-50%, -50%)`;
-            };
-
-            const handleTouchMove = (clientX, clientY) => {
-                if (!isDragging) return;
-                let dx = clientX - startX;
-                let dy = clientY - startY;
-
-                const maxRadius = 45;
-                const distance = Math.hypot(dx, dy);
-
-                if (distance > maxRadius) {
-                    dx = (dx / distance) * maxRadius;
-                    dy = (dy / distance) * maxRadius;
-                }
-
-                joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-
-                joystickVector.x = distance === 0 ? 0 : dx / maxRadius;
-                joystickVector.y = distance === 0 ? 0 : dy / maxRadius;
-            };
-
-            const resetTouchJoystick = () => {
-                isDragging = false;
-                joyBase.style.display = 'none';
-                joystickVector.x = 0;
-                joystickVector.y = 0;
-            };
-
-            const container = document.getElementById('game-container');
-
-            container.addEventListener('touchstart', (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                e.preventDefault();
-                const touch = e.touches[0];
-                handleTouchStart(touch.clientX, touch.clientY);
-            }, { passive: false });
-
-            window.addEventListener('touchmove', (e) => {
-                if (!isDragging) return;
-                const touch = e.touches[0];
-                handleTouchMove(touch.clientX, touch.clientY);
-            }, { passive: false });
-
-            window.addEventListener('touchend', resetTouchJoystick);
-            window.addEventListener('touchcancel', resetTouchJoystick);
-
-            container.addEventListener('mousedown', (e) => {
-                if (e.target.tagName === 'BUTTON') return;
-                handleTouchStart(e.clientX, e.clientY);
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (isDragging) handleTouchMove(e.clientX, e.clientY);
-            });
-
-            window.addEventListener('mouseup', resetTouchJoystick);
+                grid.appendChild(btn);
+            }
         }
 
         function update(dt) {
@@ -822,14 +628,12 @@
                 dy = joystickVector.y;
             }
 
-            // Restored original player speed
-            const moveSpeed = player.speed * tileSize * 1.5;
+            const moveSpeed = player.speed * tileSize;
             player.vx = dx * moveSpeed;
             player.vy = dy * moveSpeed;
 
             moveAndCollide(player, dt);
 
-            // Turret rotation (Clockwise for Normal, Counter-Clockwise for EX)
             player.angle += player.turretRotSpeed * dt;
 
             player.shootTimer += dt;
@@ -876,16 +680,16 @@
                 showOverlayWithMessage('GAME OVER', 'YOUR TANK WAS DESTROYED', 'RETRY', () => {
                     loadStage(currentStage);
                     gameState = 'PLAYING';
+                    audio.startBGM();
                     hideAllOverlays();
                 }, {
                     time: formatTime(currentStageTime),
                     deaths: totalDeaths
                 });
-            } else if (enemies.length === 0) {
+            } else if (!stageLoading && enemies.length === 0) {
                 audio.playClear();
                 if (currentStage >= 32) {
                     if (!isEXMode) {
-                        // UNLOCK EX MODE
                         exUnlocked = true;
                         localStorage.setItem('rotary_tank_ex_unlocked', 'true');
                         document.getElementById('mode-selector').classList.remove('hidden');
@@ -893,6 +697,7 @@
                         gameState = 'STAGE_CLEAR';
                         showOverlayWithMessage('VICTORY!', 'CONGRATULATIONS! ALL 32 STAGES CLEARED!\nEX MODE (裏面) UNLOCKED!', 'TITLE MENU', () => {
                             gameState = 'TITLE';
+                            audio.stopBGM();
                             showOverlay('title-overlay');
                         }, {
                             time: formatTime(totalPlayTime),
@@ -902,6 +707,7 @@
                         gameState = 'STAGE_CLEAR';
                         showOverlayWithMessage('EX VICTORY!', 'ALL EX STAGES COMPLETED! YOU ARE A MASTER!', 'TITLE MENU', () => {
                             gameState = 'TITLE';
+                            audio.stopBGM();
                             showOverlay('title-overlay');
                         }, {
                             time: formatTime(totalPlayTime),
@@ -920,6 +726,7 @@
                         currentStage++;
                         loadStage(currentStage);
                         gameState = 'PLAYING';
+                        audio.startBGM();
                         hideAllOverlays();
                     }, {
                         time: formatTime(currentStageTime),
@@ -970,7 +777,7 @@
                 radius: 4,
                 isPlayer: isPlayer,
                 lifeTimer: 0,
-                maxLife: isPlayer ? player.bulletMaxLife : 5.0, // 5s Normal, 7s EX for player
+                maxLife: isPlayer ? player.bulletMaxLife : 5.0,
                 bounceCooldown: 0
             });
             audio.playShoot();
@@ -1203,6 +1010,164 @@
             ctx.restore();
         }
 
+        function setupControls() {
+            document.getElementById('btn-start').onclick = () => {
+                audio.init();
+                audio.startBGM();
+                loadStage(currentStage);
+                gameState = 'PLAYING';
+                hideAllOverlays();
+            };
+
+            document.getElementById('btn-select-normal').onclick = () => {
+                audio.init();
+                setEXMode(false);
+            };
+            document.getElementById('btn-select-ex').onclick = () => {
+                audio.init();
+                setEXMode(true);
+            };
+
+            document.getElementById('btn-stage-select-menu').onclick = () => {
+                audio.init();
+                buildStageSelectMenu();
+                showOverlay('stage-overlay');
+            };
+
+            document.getElementById('btn-stage-back').onclick = () => {
+                audio.init();
+                showOverlay('title-overlay');
+            };
+
+            document.getElementById('btn-sound-toggle').onclick = (e) => {
+                audio.init();
+                audio.muted = !audio.muted;
+                e.target.innerText = `SOUND: ${audio.muted ? 'OFF' : 'ON'}`;
+                if (!audio.muted && gameState === 'PLAYING') {
+                    audio.startBGM();
+                } else if (audio.muted) {
+                    audio.stopBGM();
+                }
+            };
+
+            document.getElementById('btn-pause').onclick = () => {
+                audio.init();
+                if (gameState === 'PLAYING') {
+                    gameState = 'PAUSED';
+                    audio.stopBGM();
+                    showOverlayWithMessage('PAUSED', 'GAME SUSPENDED', 'RESUME');
+                } else if (gameState === 'PAUSED') {
+                    gameState = 'PLAYING';
+                    audio.startBGM();
+                    hideAllOverlays();
+                }
+            };
+
+            document.getElementById('btn-restart').onclick = () => {
+                audio.init();
+                if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAME_OVER') {
+                    loadStage(currentStage);
+                    gameState = 'PLAYING';
+                    audio.startBGM();
+                    hideAllOverlays();
+                }
+            };
+
+            window.addEventListener('keydown', (e) => {
+                audio.init();
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = true;
+                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = true;
+                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+                if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+            });
+
+            window.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keys.up = false;
+                if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keys.down = false;
+                if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+                if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+            });
+
+            const joyBase = document.getElementById('touch-joystick-base');
+            const joyKnob = document.getElementById('touch-joystick-knob');
+            let isDragging = false;
+            let startX = 0;
+            let startY = 0;
+
+            const handleTouchStart = (clientX, clientY) => {
+                audio.init();
+                if (gameState !== 'PLAYING') return;
+                isDragging = true;
+                startX = clientX;
+                startY = clientY;
+
+                const rect = canvas.getBoundingClientRect();
+                const relativeX = clientX - rect.left;
+                const relativeY = clientY - rect.top;
+
+                joyBase.style.left = `${relativeX}px`;
+                joyBase.style.top = `${relativeY}px`;
+                joyBase.style.display = 'block';
+                joyKnob.style.transform = `translate(-50%, -50%)`;
+            };
+
+            const handleTouchMove = (clientX, clientY) => {
+                if (!isDragging) return;
+                let dx = clientX - startX;
+                let dy = clientY - startY;
+
+                const maxRadius = 45;
+                const distance = Math.hypot(dx, dy);
+
+                if (distance > maxRadius) {
+                    dx = (dx / distance) * maxRadius;
+                    dy = (dy / distance) * maxRadius;
+                }
+
+                joyKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+                joystickVector.x = distance === 0 ? 0 : dx / maxRadius;
+                joystickVector.y = distance === 0 ? 0 : dy / maxRadius;
+            };
+
+            const resetTouchJoystick = () => {
+                isDragging = false;
+                joyBase.style.display = 'none';
+                joystickVector.x = 0;
+                joystickVector.y = 0;
+            };
+
+            const container = document.getElementById('game-container');
+
+            container.addEventListener('touchstart', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                handleTouchStart(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!isDragging) return;
+                const touch = e.touches[0];
+                handleTouchMove(touch.clientX, touch.clientY);
+            }, { passive: false });
+
+            window.addEventListener('touchend', resetTouchJoystick);
+            window.addEventListener('touchcancel', resetTouchJoystick);
+
+            container.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                handleTouchStart(e.clientX, e.clientY);
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (isDragging) handleTouchMove(e.clientX, e.clientY);
+            });
+
+            window.addEventListener('mouseup', resetTouchJoystick);
+        }
+
+        let lastTime = 0;
         function gameLoop(time) {
             const dt = Math.min((time - lastTime) / 1000, 0.1);
             lastTime = time;
@@ -1211,6 +1176,17 @@
             render();
 
             requestAnimationFrame(gameLoop);
+        }
+
+        function initGame() {
+            gridMap = generateStageLayout(1);
+            setupControls();
+            buildStageSelectMenu();
+            showOverlay('title-overlay');
+            requestAnimationFrame((time) => {
+                lastTime = time;
+                gameLoop(time);
+            });
         }
 
         window.onload = () => {
