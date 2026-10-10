@@ -377,7 +377,7 @@
             x: 0, y: 0,
             vx: 0, vy: 0,
             angle: 0,
-            speed: 1.8, // Slightly reduced speed as requested
+            speed: 2.2, // Restored to original speed
             radius: 12,
             turretRotSpeed: 2.2, // Clockwise (Normal) or Counter-Clockwise (EX)
             shootCooldown: 3.0,  // 3s (Normal), 2s (EX)
@@ -822,8 +822,8 @@
                 dy = joystickVector.y;
             }
 
-            // Player speed slightly reduced for optimal control
-            const moveSpeed = player.speed * tileSize * 1.25;
+            // Restored original player speed
+            const moveSpeed = player.speed * tileSize * 1.5;
             player.vx = dx * moveSpeed;
             player.vy = dy * moveSpeed;
 
