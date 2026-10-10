@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>ROTARY TANK 16</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -13,6 +13,7 @@
             -webkit-user-select: none;
             touch-action: none;
             box-sizing: border-box;
+            -webkit-touch-callout: none;
         }
 
         body {
@@ -24,6 +25,7 @@
             padding: 0;
             width: 100vw;
             height: 100vh;
+            position: fixed;
         }
 
         .pixel-art {
@@ -51,6 +53,7 @@
             border-radius: 8px;
             box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.3), 0 4px 0 #000;
             text-shadow: 2px 2px #000;
+            cursor: pointer;
         }
         .retro-btn:active, .retro-btn.pressed {
             transform: translateY(4px);
@@ -181,13 +184,17 @@
             }
 
             init() {
-                if (!this.ctx) {
-                    const AudioContext = window.AudioContext || window.webkitAudioContext;
-                    this.ctx = new AudioContext();
-                }
-                if (this.ctx.state === 'suspended') {
-                    this.ctx.resume();
-                }
+                try {
+                    if (!this.ctx) {
+                        const AudioContext = window.AudioContext || window.webkitAudioContext;
+                        if (AudioContext) {
+                            this.ctx = new AudioContext();
+                        }
+                    }
+                    if (this.ctx && this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                } catch(e) {}
             }
 
             playShoot() {
@@ -439,7 +446,6 @@
 
         function createStageEnemies(stageNum) {
             const list = [];
-            // ステージが進むにつれて敵の数が徐々に増加（1体から最大4〜5体へ）
             const count = Math.min(5, 1 + Math.floor((stageNum - 1) / 8) + Math.floor(stageNum / 10) + (isEXMode ? 1 : 0));
             
             const candidateSpots = [
