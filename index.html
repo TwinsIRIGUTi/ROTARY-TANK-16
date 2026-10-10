@@ -99,19 +99,27 @@
 </head>
 <body class="flex flex-col items-center justify-between h-screen w-screen overflow-hidden bg-slate-950 p-2">
 
-    <div id="hud" class="w-full max-w-md bg-slate-900 border-4 border-slate-700 rounded-lg px-3 py-2 flex justify-between items-center text-xs text-yellow-400 z-20 shadow-lg">
+    <div id="hud" class="w-full max-w-md bg-slate-900 border-4 border-slate-700 rounded-lg px-2 py-1.5 flex justify-between items-center text-xs text-yellow-400 z-20 shadow-lg gap-1">
         <div class="flex flex-col">
-            <span class="text-[9px] text-gray-400">STAGE</span>
+            <span class="text-[8px] text-gray-400">STAGE</span>
             <span id="hud-stage" class="text-xs font-bold text-white">01 / 32</span>
         </div>
-        <div class="flex flex-col items-center w-32">
-            <span class="text-[9px] text-gray-400">NEXT SHOT (3s)</span>
-            <div class="w-full bg-slate-800 border border-slate-600 h-2.5 rounded-full overflow-hidden mt-1">
+        <div class="flex flex-col items-center">
+            <span class="text-[8px] text-gray-400">DEATHS</span>
+            <span id="hud-deaths" class="text-xs font-bold text-red-400">0</span>
+        </div>
+        <div class="flex flex-col items-center">
+            <span class="text-[8px] text-gray-400">TIME</span>
+            <span id="hud-time" class="text-xs font-bold text-cyan-300">00:00</span>
+        </div>
+        <div class="flex flex-col items-center w-20">
+            <span class="text-[8px] text-gray-400">SHOT (3s)</span>
+            <div class="w-full bg-slate-800 border border-slate-600 h-2 rounded-full overflow-hidden mt-0.5">
                 <div id="shot-bar" class="bg-red-500 h-full w-0 transition-all duration-75"></div>
             </div>
         </div>
         <div class="flex flex-col items-end">
-            <span class="text-[9px] text-gray-400">ENEMIES</span>
+            <span class="text-[8px] text-gray-400">ENEMIES</span>
             <span id="hud-enemies" class="text-xs font-bold text-red-400">0</span>
         </div>
     </div>
@@ -154,7 +162,11 @@
         <!-- MESSAGE / PAUSE / GAME OVER OVERLAY -->
         <div id="message-overlay" class="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center p-4 z-30 hidden text-center">
             <h2 id="msg-title" class="text-lg font-bold text-yellow-400 mb-1">STAGE CLEAR</h2>
-            <p id="msg-desc" class="text-[9px] text-gray-300 mb-5">ALL ENEMIES DESTROYED</p>
+            <p id="msg-desc" class="text-[9px] text-gray-300 mb-2">ALL ENEMIES DESTROYED</p>
+            <div id="msg-stats" class="text-[9px] text-cyan-300 mb-4 space-y-1 bg-slate-900/80 p-2 rounded border border-slate-700 w-48 hidden">
+                <div>TIME: <span id="stat-time" class="text-white">00:00</span></div>
+                <div>DEATHS: <span id="stat-deaths" class="text-red-400">0</span></div>
+            </div>
             <button id="msg-btn" class="retro-btn retro-btn-green px-6 py-3 text-[10px] font-bold text-white w-40">
                 NEXT STAGE
             </button>
@@ -334,6 +346,11 @@
         let currentStage = 1;
         let maxUnlockedStage = 1;
 
+        let totalDeaths = 0;
+        let stageStartTime = 0;
+        let totalPlayTime = 0;
+        let currentStageTime = 0;
+
         let player = {
             x: 0, y: 0,
             vx: 0, vy: 0,
@@ -399,7 +416,6 @@
 
             for (let r = 2; r < GRID_SIZE - 2; r++) {
                 for (let c = 2; c < GRID_SIZE - 2; c++) {
-                    // SAFE ZONE PROTECTION: Keep bottom-left corner completely clear of random blocks
                     if (r >= GRID_SIZE - 3 && c <= 3) continue;
                     
                     const rand = pseudoRandom(blockIndex++);
@@ -419,7 +435,6 @@
             const list = [];
             const count = Math.min(2 + Math.floor(stageNum / 2), 6);
             
-            // Safe enemy spawn candidates (guaranteed away from player bottom-left spawn)
             const spawnPoints = [
                 { r: 2, c: 9 }, { r: 2, c: 5 }, { r: 4, c: 8 },
                 { r: 8, c: 9 }, { r: 3, c: 7 }, { r: 2, c: 2 }
@@ -427,13 +442,12 @@
 
             for (let i = 0; i < count; i++) {
                 const pt = spawnPoints[i % spawnPoints.length];
-                // Ensure spawn tile is empty or destructible (never embedded in permanent walls)
                 let sr = pt.r;
                 let sc = pt.c;
                 if (gridMap[sr][sc] === TILE.WALL_PERMANENT) {
-                    sr = 2; sc = 8; // fallback safe point
+                    sr = 2; sc = 8;
                 }
-                gridMap[sr][sc] = TILE.EMPTY; // Clear any obstruction at enemy spawn
+                gridMap[sr][sc] = TILE.EMPTY;
 
                 const isBoss = (stageNum % 8 === 0) && (i === 0);
 
@@ -467,7 +481,6 @@
             setupControls();
             buildStageSelectMenu();
 
-            // Safe initial grid map setup to avoid undefined rendering errors
             gridMap = generateStageLayout(1);
 
             lastTime = performance.now();
@@ -487,7 +500,6 @@
             currentStage = stageNum;
             gridMap = generateStageLayout(stageNum);
             
-            // Ensure player spawn tile (bottom-left) is completely empty and safe
             for (let r = GRID_SIZE - 3; r <= GRID_SIZE - 2; r++) {
                 for (let c = 1; c <= 2; c++) {
                     gridMap[r][c] = TILE.EMPTY;
@@ -505,12 +517,38 @@
             player.shootTimer = 0;
             player.alive = true;
 
+            currentStageTime = 0;
+
             document.getElementById('hud-stage').innerText = `${String(stageNum).padStart(2, '0')} / 32`;
             updateHUDEnemies();
+            updateHUDDeaths();
+            updateHUDTime();
         }
 
         function updateHUDEnemies() {
             document.getElementById('hud-enemies').innerText = enemies.length;
+        }
+
+        function updateHUDDeaths() {
+            const deathEl = document.getElementById('hud-deaths');
+            if (deathEl) deathEl.innerText = totalDeaths;
+        }
+
+        function updateHUDTime() {
+            const timeEl = document.getElementById('hud-time');
+            if (timeEl) {
+                const totalSeconds = Math.floor(currentStageTime);
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                timeEl.innerText = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            }
+        }
+
+        function formatTime(secondsInput) {
+            const totalSeconds = Math.floor(secondsInput);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
         function showOverlay(id) {
@@ -526,9 +564,19 @@
             });
         }
 
-        function showOverlayWithMessage(title, desc, btnText, callback) {
+        function showOverlayWithMessage(title, desc, btnText, callback, stats = null) {
             document.getElementById('msg-title').innerText = title;
             document.getElementById('msg-desc').innerText = desc;
+            
+            const statsBox = document.getElementById('msg-stats');
+            if (stats) {
+                document.getElementById('stat-time').innerText = stats.time;
+                document.getElementById('stat-deaths').innerText = stats.deaths;
+                statsBox.classList.remove('hidden');
+            } else {
+                statsBox.classList.add('hidden');
+            }
+
             const btn = document.getElementById('msg-btn');
             btn.innerText = btnText;
             btn.onclick = callback || (() => {
@@ -658,6 +706,10 @@
         function update(dt) {
             if (gameState !== 'PLAYING') return;
 
+            currentStageTime += dt;
+            totalPlayTime += dt;
+            updateHUDTime();
+
             let dx = 0;
             let dy = 0;
 
@@ -721,11 +773,16 @@
             particles = particles.filter(p => p.life > 0);
 
             if (!player.alive) {
+                totalDeaths++;
+                updateHUDDeaths();
                 gameState = 'GAME_OVER';
                 showOverlayWithMessage('GAME OVER', 'YOUR TANK WAS DESTROYED', 'RETRY', () => {
                     loadStage(currentStage);
                     gameState = 'PLAYING';
                     hideAllOverlays();
+                }, {
+                    time: formatTime(currentStageTime),
+                    deaths: totalDeaths
                 });
             } else if (enemies.length === 0) {
                 audio.playClear();
@@ -734,6 +791,9 @@
                     showOverlayWithMessage('VICTORY!', 'CONGRATULATIONS! ALL 32 STAGES CLEARED!', 'TITLE MENU', () => {
                         gameState = 'TITLE';
                         showOverlay('title-overlay');
+                    }, {
+                        time: formatTime(totalPlayTime),
+                        deaths: totalDeaths
                     });
                 } else {
                     gameState = 'STAGE_CLEAR';
@@ -744,6 +804,9 @@
                         loadStage(currentStage);
                         gameState = 'PLAYING';
                         hideAllOverlays();
+                    }, {
+                        time: formatTime(currentStageTime),
+                        deaths: totalDeaths
                     });
                 }
             }
@@ -790,7 +853,8 @@
                 radius: 4,
                 isPlayer: isPlayer,
                 lifeTimer: 0,
-                maxLife: 5.0
+                maxLife: 5.0,
+                bounceCooldown: 0 // Prevents multi-bounce jitter / sticky loops
             });
             audio.playShoot();
         }
@@ -799,6 +863,9 @@
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const b = bullets[i];
                 b.lifeTimer += dt;
+                if (b.bounceCooldown > 0) {
+                    b.bounceCooldown -= dt;
+                }
 
                 if (b.lifeTimer >= b.maxLife) {
                     explodeBullet(b, i);
@@ -819,15 +886,22 @@
                         explodeBullet(b, i);
                         continue;
                     } else if (tile === TILE.WALL_PERMANENT) {
-                        audio.playBounce();
-                        const prevCol = Math.floor(b.x / tileSize);
-                        const prevRow = Math.floor(b.y / tileSize);
+                        // FIX: Only process wall bounce if cooldown has elapsed to prevent sticky multi-trigger loops
+                        if (b.bounceCooldown <= 0) {
+                            audio.playBounce();
+                            const prevCol = Math.floor(b.x / tileSize);
+                            const prevRow = Math.floor(b.y / tileSize);
 
-                        if (prevCol !== col) b.vx = -b.vx;
-                        if (prevRow !== row) b.vy = -b.vy;
+                            if (prevCol !== col) b.vx = -b.vx;
+                            if (prevRow !== row) b.vy = -b.vy;
 
-                        createParticles(b.x, b.y, '#ffffff', 4);
-                        continue;
+                            b.bounceCooldown = 0.08; // 80ms immunity from immediate re-bounce
+                            createParticles(b.x, b.y, '#ffffff', 4);
+                        }
+                        
+                        // Continue moving using updated velocity
+                        nextX = b.x + b.vx * dt;
+                        nextY = b.y + b.vy * dt;
                     }
                 }
 
