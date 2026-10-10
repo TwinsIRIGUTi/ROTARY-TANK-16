@@ -69,39 +69,53 @@
             background: linear-gradient(180deg, #d69e2e 0%, #744210 100%);
             border-color: #ecc94b;
         }
-
-        /* Analog Joystick Container & Knob */
-        .joystick-base {
-            width: 120px;
-            height: 120px;
-            background: radial-gradient(circle, #2d3748 0%, #1a202c 100%);
-            border: 4px solid #718096;
-            border-radius: 50%;
-            position: relative;
-            box-shadow: inset 0 4px 8px rgba(0,0,0,0.6), 0 4px 0 #000;
-            touch-action: none;
+        .retro-btn-purple {
+            background: linear-gradient(180deg, #805ad5 0%, #442a74 100%);
+            border-color: #b794f4;
         }
-        .joystick-knob {
-            width: 50px;
-            height: 50px;
-            background: radial-gradient(circle, #a0aec0 0%, #4a5568 100%);
-            border: 3px solid #cbd5e0;
+
+        /* Dynamic On-Screen Touch Joystick Visual */
+        #touch-joystick-base {
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, rgba(45, 55, 72, 0.6) 0%, rgba(26, 32, 44, 0.8) 100%);
+            border: 3px solid rgba(113, 128, 150, 0.8);
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 50;
+            display: none;
+        }
+        #touch-joystick-knob {
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, rgba(160, 174, 192, 0.9) 0%, rgba(74, 85, 104, 0.9) 100%);
+            border: 2px solid rgba(203, 213, 224, 0.9);
             border-radius: 50%;
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.5);
             pointer-events: none;
-            transition: transform 0.05s ease-out;
+        }
+
+        /* EX Mode Theme Override */
+        .ex-mode-active #hud {
+            border-color: #9f7aea;
+            background-color: #1a0933;
+        }
+        .ex-mode-active #game-container {
+            border-color: #6b46c1;
         }
     </style>
 </head>
-<body class="flex flex-col items-center justify-between h-screen w-screen overflow-hidden bg-slate-950 p-2">
+<body id="main-body" class="flex flex-col items-center justify-between h-screen w-screen overflow-hidden bg-slate-950 p-2 select-none">
 
-    <div id="hud" class="w-full max-w-md bg-slate-900 border-4 border-slate-700 rounded-lg px-2 py-1.5 flex justify-between items-center text-xs text-yellow-400 z-20 shadow-lg gap-1">
+    <!-- HUD Header -->
+    <div id="hud" class="w-full max-w-md bg-slate-900 border-4 border-slate-700 rounded-lg px-2 py-1.5 flex justify-between items-center text-xs text-yellow-400 z-20 shadow-lg gap-1 transition-colors duration-300">
         <div class="flex flex-col">
-            <span class="text-[8px] text-gray-400">STAGE</span>
+            <span id="hud-mode-label" class="text-[7px] text-gray-400">NORMAL MODE</span>
             <span id="hud-stage" class="text-xs font-bold text-white">01 / 32</span>
         </div>
         <div class="flex flex-col items-center">
@@ -113,7 +127,7 @@
             <span id="hud-time" class="text-xs font-bold text-cyan-300">00:00</span>
         </div>
         <div class="flex flex-col items-center w-20">
-            <span class="text-[8px] text-gray-400">SHOT (3s)</span>
+            <span id="hud-shot-label" class="text-[8px] text-gray-400">SHOT (3s)</span>
             <div class="w-full bg-slate-800 border border-slate-600 h-2 rounded-full overflow-hidden mt-0.5">
                 <div id="shot-bar" class="bg-red-500 h-full w-0 transition-all duration-75"></div>
             </div>
@@ -124,20 +138,32 @@
         </div>
     </div>
 
-    <div id="game-container" class="relative w-full max-w-md aspect-square my-auto bg-black rounded-lg border-4 border-slate-800 overflow-hidden shadow-2xl scanlines">
+    <!-- Main Game View Canvas -->
+    <div id="game-container" class="relative w-full max-w-md aspect-square my-auto bg-black rounded-lg border-4 border-slate-800 overflow-hidden shadow-2xl scanlines transition-colors duration-300">
         <canvas id="gameCanvas" class="w-full h-full pixel-art block"></canvas>
 
-        <!-- TITLE SCREEN OVERLAY -->
+        <!-- Dynamic Touch Joystick Overlay -->
+        <div id="touch-joystick-base">
+            <div id="touch-joystick-knob"></div>
+        </div>
+
+        <!-- TITLE OVERLAY -->
         <div id="title-overlay" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center p-4 z-30 text-center">
-            <h1 class="text-2xl font-black text-yellow-400 tracking-wider mb-1 leading-tight drop-shadow-[0_4px_0_rgba(0,0,0,1)]">
-                ROTARY TANK<br><span class="text-red-500 text-3xl">16</span>
+            <h1 id="title-main" class="text-2xl font-black text-yellow-400 tracking-wider mb-1 leading-tight drop-shadow-[0_4px_0_rgba(0,0,0,1)]">
+                ROTARY TANK<br><span id="title-sub" class="text-red-500 text-3xl">16</span>
             </h1>
-            <p class="text-[9px] text-cyan-300 mb-4 tracking-widest">SFC 16-BIT RETRO ACTION</p>
-            <p class="text-[8px] text-gray-300 mb-6 leading-relaxed max-w-xs">
-                砲塔は常に自動回転！3秒毎の自動発射。<br>
-                壁の跳ね返りと5秒自爆タイマーを駆使せよ！
+            <p id="title-tagline" class="text-[9px] text-cyan-300 mb-3 tracking-widest">SFC 16-BIT RETRO ACTION</p>
+            <p id="title-desc" class="text-[8px] text-gray-300 mb-4 leading-relaxed max-w-xs">
+                画面内どこでもタップ＆スライド操作！<br>
+                砲塔自動回転＆自動発射のクセを見極めよ！
             </p>
-            <button id="btn-start" class="retro-btn retro-btn-green px-6 py-3 text-xs font-bold text-white mb-2 w-48">
+
+            <div id="mode-selector" class="flex gap-2 mb-3 hidden">
+                <button id="btn-select-normal" class="retro-btn retro-btn-green px-3 py-1.5 text-[9px] font-bold text-white">NORMAL</button>
+                <button id="btn-select-ex" class="retro-btn retro-btn-purple px-3 py-1.5 text-[9px] font-bold text-white">EX MODE (裏面)</button>
+            </div>
+
+            <button id="btn-start" class="retro-btn retro-btn-green px-6 py-2.5 text-xs font-bold text-white mb-2 w-48">
                 GAME START
             </button>
             <button id="btn-stage-select-menu" class="retro-btn retro-btn-yellow px-5 py-2 text-[10px] font-bold text-white mb-2 w-48">
@@ -150,16 +176,14 @@
 
         <!-- STAGE SELECT OVERLAY -->
         <div id="stage-overlay" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-start p-3 z-30 hidden">
-            <h2 class="text-xs font-bold text-yellow-400 mb-2">SELECT STAGE (1-32)</h2>
-            <div id="stage-grid" class="grid grid-cols-4 gap-1.5 w-full max-h-72 overflow-y-auto p-1 mb-3">
-                <!-- Dynamic Stage Buttons -->
-            </div>
+            <h2 id="stage-select-title" class="text-xs font-bold text-yellow-400 mb-2">SELECT STAGE (1-32)</h2>
+            <div id="stage-grid" class="grid grid-cols-4 gap-1.5 w-full max-h-72 overflow-y-auto p-1 mb-3"></div>
             <button id="btn-stage-back" class="retro-btn retro-btn-red px-6 py-2 text-[10px] font-bold text-white">
                 BACK
             </button>
         </div>
 
-        <!-- MESSAGE / PAUSE / GAME OVER OVERLAY -->
+        <!-- MESSAGE OVERLAY -->
         <div id="message-overlay" class="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center p-4 z-30 hidden text-center">
             <h2 id="msg-title" class="text-lg font-bold text-yellow-400 mb-1">STAGE CLEAR</h2>
             <p id="msg-desc" class="text-[9px] text-gray-300 mb-2">ALL ENEMIES DESTROYED</p>
@@ -173,22 +197,12 @@
         </div>
     </div>
 
-    <div id="mobile-controls" class="w-full max-w-md flex justify-between items-center px-4 py-2 bg-slate-900/90 rounded-xl border-2 border-slate-800 z-20">
-        <!-- Analog Joystick Controller -->
-        <div class="flex items-center justify-center p-1">
-            <div id="joystick-container" class="joystick-base flex items-center justify-center cursor-pointer">
-                <div id="joystick-knob" class="joystick-knob"></div>
-            </div>
-        </div>
-
-        <!-- Side Buttons -->
-        <div class="flex flex-col gap-2 items-end">
-            <button id="btn-pause" class="retro-btn retro-btn-yellow px-4 py-2 text-[10px] font-bold text-white w-28">
-                PAUSE
-            </button>
-            <button id="btn-restart" class="retro-btn retro-btn-red px-4 py-2 text-[10px] font-bold text-white w-28">
-                RESTART
-            </button>
+    <!-- Quick Control Bar -->
+    <div id="mobile-controls" class="w-full max-w-md flex justify-around items-center px-4 py-1.5 bg-slate-900/90 rounded-xl border-2 border-slate-800 z-20">
+        <span class="text-[8px] text-gray-400">TOUCH ANYWHERE TO MOVE</span>
+        <div class="flex gap-2">
+            <button id="btn-pause" class="retro-btn retro-btn-yellow px-3 py-1.5 text-[9px] font-bold text-white">PAUSE</button>
+            <button id="btn-restart" class="retro-btn retro-btn-red px-3 py-1.5 text-[9px] font-bold text-white">RESTART</button>
         </div>
     </div>
 
@@ -218,7 +232,7 @@
                     const osc = this.ctx.createOscillator();
                     const gain = this.ctx.createGain();
                     osc.type = 'square';
-                    osc.frequency.setValueAtTime(440, now);
+                    osc.frequency.setValueAtTime(isEXMode ? 580 : 440, now);
                     osc.frequency.exponentialRampToValueAtTime(110, now + 0.15);
                     gain.gain.setValueAtTime(0.2, now);
                     gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
@@ -276,7 +290,9 @@
 
             playClear() {
                 if (this.muted || !this.ctx) return;
-                const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
+                const notes = isEXMode 
+                    ? [329.63, 392.00, 493.88, 659.25, 783.99, 987.77]
+                    : [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
                 notes.forEach((freq, index) => {
                     setTimeout(() => {
                         if (this.muted || !this.ctx) return;
@@ -299,18 +315,20 @@
 
             startBGM() {
                 if (this.bgmTimer) return;
-                const bassNotes = [110, 110, 130.81, 146.83, 110, 110, 98, 87.31];
+                const normalBass = [110, 110, 130.81, 146.83, 110, 110, 98, 87.31];
+                const exBass = [146.83, 130.81, 110, 130.81, 146.83, 164.81, 146.83, 123.47];
                 this.bgmStep = 0;
                 this.bgmTimer = setInterval(() => {
                     if (this.muted || !this.ctx || this.ctx.state !== 'running') return;
                     try {
                         const now = this.ctx.currentTime;
-                        const freq = bassNotes[this.bgmStep % bassNotes.length];
+                        const notes = isEXMode ? exBass : normalBass;
+                        const freq = notes[this.bgmStep % notes.length];
                         const osc = this.ctx.createOscillator();
                         const gain = this.ctx.createGain();
-                        osc.type = 'sawtooth';
+                        osc.type = isEXMode ? 'sawtooth' : 'triangle';
                         osc.frequency.setValueAtTime(freq, now);
-                        gain.gain.setValueAtTime(0.04, now);
+                        gain.gain.setValueAtTime(0.05, now);
                         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
                         osc.connect(gain);
                         gain.connect(this.ctx.destination);
@@ -318,7 +336,7 @@
                         osc.stop(now + 0.18);
                         this.bgmStep++;
                     } catch(e) {}
-                }, 200);
+                }, isEXMode ? 160 : 200);
             }
 
             stopBGM() {
@@ -331,6 +349,7 @@
 
         const audio = new SoundEngine();
 
+        // Game Constants & Configuration
         const GRID_SIZE = 12;
         let canvas, ctx;
         let tileSize = 32;
@@ -343,11 +362,14 @@
         };
 
         let gameState = 'TITLE';
+        let isEXMode = false;
+        let exUnlocked = false;
+
         let currentStage = 1;
-        let maxUnlockedStage = 1;
+        let maxUnlockedStageNormal = 1;
+        let maxUnlockedStageEX = 1;
 
         let totalDeaths = 0;
-        let stageStartTime = 0;
         let totalPlayTime = 0;
         let currentStageTime = 0;
 
@@ -355,11 +377,12 @@
             x: 0, y: 0,
             vx: 0, vy: 0,
             angle: 0,
-            speed: 2.3,
+            speed: 1.8, // Slightly reduced speed as requested
             radius: 12,
-            turretRotSpeed: 2.2,
-            shootCooldown: 3.0,
+            turretRotSpeed: 2.2, // Clockwise (Normal) or Counter-Clockwise (EX)
+            shootCooldown: 3.0,  // 3s (Normal), 2s (EX)
             shootTimer: 0,
+            bulletMaxLife: 5.0,  // 5s (Normal), 7s (EX)
             alive: true
         };
 
@@ -376,13 +399,19 @@
             const gridEl = document.getElementById('stage-grid');
             if (!gridEl) return;
             gridEl.innerHTML = '';
+            
+            const maxUnlocked = isEXMode ? maxUnlockedStageEX : maxUnlockedStageNormal;
+            
             for (let i = 1; i <= 32; i++) {
                 const btn = document.createElement('button');
-                btn.className = `retro-btn px-2 py-2 text-[9px] font-bold text-white ${i <= maxUnlockedStage ? 'retro-btn-green' : 'opacity-40'}`;
+                const isUnlocked = i <= maxUnlocked;
+                btn.className = `retro-btn px-2 py-2 text-[9px] font-bold text-white ${
+                    isUnlocked ? (isEXMode ? 'retro-btn-purple' : 'retro-btn-green') : 'opacity-40'
+                }`;
                 btn.innerText = `ST ${String(i).padStart(2, '0')}`;
-                btn.disabled = i > maxUnlockedStage;
+                btn.disabled = !isUnlocked;
                 btn.onclick = () => {
-                    if (i <= maxUnlockedStage) {
+                    if (isUnlocked) {
                         audio.init();
                         audio.startBGM();
                         loadStage(i);
@@ -392,6 +421,8 @@
                 };
                 gridEl.appendChild(btn);
             }
+
+            document.getElementById('stage-select-title').innerText = `${isEXMode ? 'EX MODE' : 'NORMAL MODE'} - SELECT STAGE (1-32)`;
         }
 
         function generateStageLayout(stageNum) {
@@ -404,19 +435,19 @@
                 }
             }
 
-            const seed = stageNum * 1337;
+            const seed = stageNum * (isEXMode ? 9999 : 1337);
             const pseudoRandom = (offset) => {
                 const x = Math.sin(seed + offset) * 10000;
                 return x - Math.floor(x);
             };
 
             const isIceTheme = stageNum >= 9 && stageNum <= 16;
-            let fillRatio = 0.14 + (stageNum % 8) * 0.02;
+            let fillRatio = (isEXMode ? 0.18 : 0.14) + (stageNum % 8) * 0.02;
             let blockIndex = 0;
 
             for (let r = 2; r < GRID_SIZE - 2; r++) {
                 for (let c = 2; c < GRID_SIZE - 2; c++) {
-                    if (r >= GRID_SIZE - 3 && c <= 3) continue;
+                    if (r >= GRID_SIZE - 3 && c <= 3) continue; // Guarantee player spawn zone safety
                     
                     const rand = pseudoRandom(blockIndex++);
                     if (rand < fillRatio) {
@@ -433,7 +464,7 @@
 
         function createStageEnemies(stageNum) {
             const list = [];
-            const count = Math.min(2 + Math.floor(stageNum / 2), 6);
+            const count = Math.min(2 + Math.floor(stageNum / 2) + (isEXMode ? 1 : 0), 7);
             
             const spawnPoints = [
                 { r: 2, c: 9 }, { r: 2, c: 5 }, { r: 4, c: 8 },
@@ -455,14 +486,14 @@
                     x: (sc + 0.5) * tileSize,
                     y: (sr + 0.5) * tileSize,
                     radius: isBoss ? 16 : 12,
-                    speed: isBoss ? 0.7 : 0.75 + (stageNum * 0.04),
-                    hp: isBoss ? 4 : 1,
-                    maxHp: isBoss ? 4 : 1,
-                    color: isBoss ? '#e53e3e' : (i % 2 === 0 ? '#dd6b20' : '#d69e2e'),
+                    speed: (isBoss ? 0.7 : 0.75 + (stageNum * 0.04)) * (isEXMode ? 1.2 : 1.0),
+                    hp: (isBoss ? 4 : 1) + (isEXMode ? 1 : 0),
+                    maxHp: (isBoss ? 4 : 1) + (isEXMode ? 1 : 0),
+                    color: isEXMode ? '#9f7aea' : (isBoss ? '#e53e3e' : (i % 2 === 0 ? '#dd6b20' : '#d69e2e')),
                     turretAngle: 0,
-                    turretRotSpeed: 1.4,
+                    turretRotSpeed: 1.4 * (isEXMode ? -1.5 : 1.0),
                     shootTimer: Math.random() * 2.0,
-                    shootCooldown: Math.max(1.8, 3.2 - (stageNum * 0.04)),
+                    shootCooldown: Math.max(1.5, (3.2 - (stageNum * 0.04)) * (isEXMode ? 0.8 : 1.0)),
                     vx: 0, vy: 0,
                     changeDirTimer: 0,
                     isBoss: isBoss
@@ -479,12 +510,50 @@
             window.addEventListener('resize', resizeCanvas);
 
             setupControls();
-            buildStageSelectMenu();
+            
+            // Check Local Storage for EX Unlock
+            exUnlocked = localStorage.getItem('rotary_tank_ex_unlocked') === 'true';
+            if (exUnlocked) {
+                document.getElementById('mode-selector').classList.remove('hidden');
+            }
 
             gridMap = generateStageLayout(1);
 
             lastTime = performance.now();
             requestAnimationFrame(gameLoop);
+        }
+
+        function setEXMode(enabled) {
+            isEXMode = enabled;
+            const body = document.getElementById('main-body');
+            const modeLabel = document.getElementById('hud-mode-label');
+            const shotLabel = document.getElementById('hud-shot-label');
+            const subTitle = document.getElementById('title-sub');
+
+            if (isEXMode) {
+                body.classList.add('ex-mode-active');
+                modeLabel.innerText = "EX MODE (裏面)";
+                modeLabel.className = "text-[7px] text-purple-400 font-bold";
+                shotLabel.innerText = "SHOT (2s)";
+                subTitle.innerText = "16 EX";
+                subTitle.className = "text-purple-400 text-3xl font-black";
+
+                player.turretRotSpeed = -2.5; // Counter-clockwise
+                player.shootCooldown = 2.0;   // 2 second cooldown
+                player.bulletMaxLife = 7.0;   // 7 second auto-detonation
+            } else {
+                body.classList.remove('ex-mode-active');
+                modeLabel.innerText = "NORMAL MODE";
+                modeLabel.className = "text-[7px] text-gray-400";
+                shotLabel.innerText = "SHOT (3s)";
+                subTitle.innerText = "16";
+                subTitle.className = "text-red-500 text-3xl font-black";
+
+                player.turretRotSpeed = 2.2;  // Clockwise
+                player.shootCooldown = 3.0;   // 3 second cooldown
+                player.bulletMaxLife = 5.0;   // 5 second auto-detonation
+            }
+            buildStageSelectMenu();
         }
 
         function resizeCanvas() {
@@ -500,6 +569,7 @@
             currentStage = stageNum;
             gridMap = generateStageLayout(stageNum);
             
+            // Safe spawn zone clear
             for (let r = GRID_SIZE - 3; r <= GRID_SIZE - 2; r++) {
                 for (let c = 1; c <= 2; c++) {
                     gridMap[r][c] = TILE.EMPTY;
@@ -530,8 +600,7 @@
         }
 
         function updateHUDDeaths() {
-            const deathEl = document.getElementById('hud-deaths');
-            if (deathEl) deathEl.innerText = totalDeaths;
+            document.getElementById('hud-deaths').innerText = totalDeaths;
         }
 
         function updateHUDTime() {
@@ -579,6 +648,7 @@
 
             const btn = document.getElementById('msg-btn');
             btn.innerText = btnText;
+            btn.className = `retro-btn ${isEXMode ? 'retro-btn-purple' : 'retro-btn-green'} px-6 py-3 text-[10px] font-bold text-white w-40`;
             btn.onclick = callback || (() => {
                 hideAllOverlays();
                 gameState = 'PLAYING';
@@ -593,6 +663,13 @@
                 loadStage(currentStage);
                 gameState = 'PLAYING';
                 hideAllOverlays();
+            };
+
+            document.getElementById('btn-select-normal').onclick = () => {
+                setEXMode(false);
+            };
+            document.getElementById('btn-select-ex').onclick = () => {
+                setEXMode(true);
             };
 
             document.getElementById('btn-stage-select-menu').onclick = () => {
@@ -642,19 +719,35 @@
                 if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
             });
 
-            const joyContainer = document.getElementById('joystick-container');
-            const joyKnob = document.getElementById('joystick-knob');
+            // --- TOUCH ANYWHERE JOYSTICK MECHANIC ---
+            const joyBase = document.getElementById('touch-joystick-base');
+            const joyKnob = document.getElementById('touch-joystick-knob');
             let isDragging = false;
+            let startX = 0;
+            let startY = 0;
 
-            const handleJoystickMove = (clientX, clientY) => {
-                const rect = joyContainer.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                
-                let dx = clientX - centerX;
-                let dy = clientY - centerY;
-                
-                const maxRadius = rect.width / 2 - 10;
+            const handleTouchStart = (clientX, clientY) => {
+                if (gameState !== 'PLAYING') return;
+                isDragging = true;
+                startX = clientX;
+                startY = clientY;
+
+                const rect = canvas.getBoundingClientRect();
+                const relativeX = clientX - rect.left;
+                const relativeY = clientY - rect.top;
+
+                joyBase.style.left = `${relativeX}px`;
+                joyBase.style.top = `${relativeY}px`;
+                joyBase.style.display = 'block';
+                joyKnob.style.transform = `translate(-50%, -50%)`;
+            };
+
+            const handleTouchMove = (clientX, clientY) => {
+                if (!isDragging) return;
+                let dx = clientX - startX;
+                let dy = clientY - startY;
+
+                const maxRadius = 45;
                 const distance = Math.hypot(dx, dy);
 
                 if (distance > maxRadius) {
@@ -668,39 +761,41 @@
                 joystickVector.y = distance === 0 ? 0 : dy / maxRadius;
             };
 
-            const resetJoystick = () => {
+            const resetTouchJoystick = () => {
                 isDragging = false;
-                joyKnob.style.transform = `translate(-50%, -50%)`;
+                joyBase.style.display = 'none';
                 joystickVector.x = 0;
                 joystickVector.y = 0;
             };
 
-            joyContainer.addEventListener('touchstart', (e) => {
+            const container = document.getElementById('game-container');
+
+            container.addEventListener('touchstart', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
                 e.preventDefault();
-                isDragging = true;
                 const touch = e.touches[0];
-                handleJoystickMove(touch.clientX, touch.clientY);
+                handleTouchStart(touch.clientX, touch.clientY);
             }, { passive: false });
 
             window.addEventListener('touchmove', (e) => {
                 if (!isDragging) return;
                 const touch = e.touches[0];
-                handleJoystickMove(touch.clientX, touch.clientY);
+                handleTouchMove(touch.clientX, touch.clientY);
             }, { passive: false });
 
-            window.addEventListener('touchend', resetJoystick);
-            window.addEventListener('touchcancel', resetJoystick);
+            window.addEventListener('touchend', resetTouchJoystick);
+            window.addEventListener('touchcancel', resetTouchJoystick);
 
-            joyContainer.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                handleJoystickMove(e.clientX, e.clientY);
+            container.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                handleTouchStart(e.clientX, e.clientY);
             });
 
             window.addEventListener('mousemove', (e) => {
-                if (isDragging) handleJoystickMove(e.clientX, e.clientY);
+                if (isDragging) handleTouchMove(e.clientX, e.clientY);
             });
 
-            window.addEventListener('mouseup', resetJoystick);
+            window.addEventListener('mouseup', resetTouchJoystick);
         }
 
         function update(dt) {
@@ -727,12 +822,14 @@
                 dy = joystickVector.y;
             }
 
-            const moveSpeed = player.speed * tileSize * 1.5;
+            // Player speed slightly reduced for optimal control
+            const moveSpeed = player.speed * tileSize * 1.25;
             player.vx = dx * moveSpeed;
             player.vy = dy * moveSpeed;
 
             moveAndCollide(player, dt);
 
+            // Turret rotation (Clockwise for Normal, Counter-Clockwise for EX)
             player.angle += player.turretRotSpeed * dt;
 
             player.shootTimer += dt;
@@ -787,17 +884,37 @@
             } else if (enemies.length === 0) {
                 audio.playClear();
                 if (currentStage >= 32) {
-                    gameState = 'STAGE_CLEAR';
-                    showOverlayWithMessage('VICTORY!', 'CONGRATULATIONS! ALL 32 STAGES CLEARED!', 'TITLE MENU', () => {
-                        gameState = 'TITLE';
-                        showOverlay('title-overlay');
-                    }, {
-                        time: formatTime(totalPlayTime),
-                        deaths: totalDeaths
-                    });
+                    if (!isEXMode) {
+                        // UNLOCK EX MODE
+                        exUnlocked = true;
+                        localStorage.setItem('rotary_tank_ex_unlocked', 'true');
+                        document.getElementById('mode-selector').classList.remove('hidden');
+
+                        gameState = 'STAGE_CLEAR';
+                        showOverlayWithMessage('VICTORY!', 'CONGRATULATIONS! ALL 32 STAGES CLEARED!\nEX MODE (裏面) UNLOCKED!', 'TITLE MENU', () => {
+                            gameState = 'TITLE';
+                            showOverlay('title-overlay');
+                        }, {
+                            time: formatTime(totalPlayTime),
+                            deaths: totalDeaths
+                        });
+                    } else {
+                        gameState = 'STAGE_CLEAR';
+                        showOverlayWithMessage('EX VICTORY!', 'ALL EX STAGES COMPLETED! YOU ARE A MASTER!', 'TITLE MENU', () => {
+                            gameState = 'TITLE';
+                            showOverlay('title-overlay');
+                        }, {
+                            time: formatTime(totalPlayTime),
+                            deaths: totalDeaths
+                        });
+                    }
                 } else {
                     gameState = 'STAGE_CLEAR';
-                    if (currentStage === maxUnlockedStage) maxUnlockedStage++;
+                    if (!isEXMode) {
+                        if (currentStage === maxUnlockedStageNormal) maxUnlockedStageNormal++;
+                    } else {
+                        if (currentStage === maxUnlockedStageEX) maxUnlockedStageEX++;
+                    }
                     buildStageSelectMenu();
                     showOverlayWithMessage(`STAGE ${currentStage} CLEAR!`, 'ALL ENEMIES DESTROYED', 'NEXT STAGE', () => {
                         currentStage++;
@@ -853,8 +970,8 @@
                 radius: 4,
                 isPlayer: isPlayer,
                 lifeTimer: 0,
-                maxLife: 5.0,
-                bounceCooldown: 0 // Prevents multi-bounce jitter / sticky loops
+                maxLife: isPlayer ? player.bulletMaxLife : 5.0, // 5s Normal, 7s EX for player
+                bounceCooldown: 0
             });
             audio.playShoot();
         }
@@ -886,7 +1003,6 @@
                         explodeBullet(b, i);
                         continue;
                     } else if (tile === TILE.WALL_PERMANENT) {
-                        // FIX: Only process wall bounce if cooldown has elapsed to prevent sticky multi-trigger loops
                         if (b.bounceCooldown <= 0) {
                             audio.playBounce();
                             const prevCol = Math.floor(b.x / tileSize);
@@ -895,11 +1011,10 @@
                             if (prevCol !== col) b.vx = -b.vx;
                             if (prevRow !== row) b.vy = -b.vy;
 
-                            b.bounceCooldown = 0.08; // 80ms immunity from immediate re-bounce
+                            b.bounceCooldown = 0.08;
                             createParticles(b.x, b.y, '#ffffff', 4);
                         }
                         
-                        // Continue moving using updated velocity
                         nextX = b.x + b.vx * dt;
                         nextY = b.y + b.vy * dt;
                     }
@@ -942,7 +1057,7 @@
 
         function explodeBullet(bullet, index) {
             audio.playExplode();
-            createParticles(bullet.x, bullet.y, '#f6ad55', 14);
+            createParticles(bullet.x, bullet.y, isEXMode ? '#c084fc' : '#f6ad55', 14);
             
             const splashRadius = tileSize * 0.8;
             
@@ -1006,15 +1121,15 @@
                     const y = r * tileSize;
 
                     if (tile === TILE.WALL_PERMANENT) {
-                        ctx.fillStyle = '#4a5568';
+                        ctx.fillStyle = isEXMode ? '#4c1d95' : '#4a5568';
                         ctx.fillRect(x, y, tileSize, tileSize);
-                        ctx.strokeStyle = '#718096';
+                        ctx.strokeStyle = isEXMode ? '#7c3aed' : '#718096';
                         ctx.lineWidth = 2;
                         ctx.strokeRect(x + 2, y + 2, tileSize - 4, tileSize - 4);
                     } else if (tile === TILE.BLOCK_DESTRUCT) {
-                        ctx.fillStyle = '#9b2c2c';
+                        ctx.fillStyle = isEXMode ? '#701a75' : '#9b2c2c';
                         ctx.fillRect(x, y, tileSize, tileSize);
-                        ctx.strokeStyle = '#c53030';
+                        ctx.strokeStyle = isEXMode ? '#a21caf' : '#c53030';
                         ctx.lineWidth = 1;
                         ctx.strokeRect(x, y, tileSize, tileSize);
                         ctx.beginPath();
@@ -1026,7 +1141,7 @@
                         ctx.fillRect(x, y, tileSize, tileSize);
                         ctx.globalAlpha = 1.0;
                     } else {
-                        ctx.fillStyle = (r + c) % 2 === 0 ? '#111827' : '#1f2937';
+                        ctx.fillStyle = (r + c) % 2 === 0 ? (isEXMode ? '#0f0728' : '#111827') : (isEXMode ? '#1e1035' : '#1f2937');
                         ctx.fillRect(x, y, tileSize, tileSize);
                     }
                 }
@@ -1034,11 +1149,11 @@
 
             bullets.forEach(b => {
                 ctx.save();
-                ctx.fillStyle = b.isPlayer ? '#38bdf8' : '#f87171';
+                ctx.fillStyle = b.isPlayer ? (isEXMode ? '#c084fc' : '#38bdf8') : '#f87171';
                 ctx.beginPath();
                 ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
                 ctx.fill();
-                if (b.lifeTimer > 3.8) {
+                if (b.lifeTimer > b.maxLife - 1.2) {
                     ctx.strokeStyle = '#facc15';
                     ctx.lineWidth = 2;
                     ctx.stroke();
@@ -1047,7 +1162,7 @@
             });
 
             if (player.alive) {
-                drawTank(player.x, player.y, player.angle, '#38a169', '#48bb78');
+                drawTank(player.x, player.y, player.angle, isEXMode ? '#8b5cf6' : '#38a169', isEXMode ? '#a78bfa' : '#48bb78');
             }
 
             enemies.forEach(enemy => {
