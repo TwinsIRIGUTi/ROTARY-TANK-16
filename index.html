@@ -364,6 +364,10 @@
         let timerInterval = null;
         const TOTAL_STAGES_PER_MODE = 16;
 
+        // Joystick Input State
+        let joystickActive = false;
+        let joystickVector = { x: 0, y: 0 };
+
         // Map layout & entities
         let gridCols = 10;
         let gridRows = 10;
@@ -376,6 +380,39 @@
 
         // Input state
         const keys = { w: false, a: false, s: false, d: false, up: false, left: false, down: false, right: false };
+
+        // Canvas Window Resize Handler
+        function resizeCanvas() {
+            const screenArea = document.getElementById('screen-area');
+            if (!screenArea || !canvas) return;
+            
+            const areaWidth = screenArea.clientWidth;
+            const areaHeight = screenArea.clientHeight;
+            const size = Math.min(areaWidth, areaHeight) - 10; // Margin
+            
+            canvas.width = Math.max(300, size);
+            canvas.height = Math.max(300, size);
+            tileSize = canvas.width / 10;
+
+            // Update player & enemy radius based on resized tileSize
+            if (player && player.x) {
+                player.radius = tileSize * 0.35;
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        window.addEventListener('load', () => {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            resizeCanvas();
+            initInputs();
+            updateEXButton();
+            requestAnimationFrame(gameLoop);
+        });
+
         // Procedural/Predefined Stage Generator for 16 Stages per Mode
         function loadStage(stageNum, mode) {
             currentStageIndex = stageNum;
@@ -384,6 +421,8 @@
             bullets = [];
             particles = [];
             enemies = [];
+
+            resizeCanvas();
 
             // 10x10 Grid generation based on stage shape patterns
             // Patterns: 0=Empty, 1=Permanent Wall, 2=Destructible, 3=Ice
@@ -410,7 +449,7 @@
                 mapGrid.push(row);
             }
 
-            // Ensure player spawn at bottom-left (8, 8)
+            // Ensure player spawn at bottom-left (8, 1)
             mapGrid[8][1] = TILE_EMPTY;
             mapGrid[8][2] = TILE_EMPTY;
             mapGrid[7][1] = TILE_EMPTY;
@@ -439,7 +478,6 @@
                 let isBoss = isBossStage && i === 0;
 
                 // Stage progression: Enemy types
-                // Normal Enemy, Fast Turret Enemy (Mid-stage), Fast Mobile Enemy (Late-stage)
                 let enemyType = 'normal';
                 if (!isBoss && stageNum >= 5) {
                     if (i % 2 === 1 || stageNum >= 12) {
@@ -848,20 +886,30 @@
                 ctx.save();
                 ctx.translate(e.x, e.y);
                 
-                // Enemy body (SFC sprite style)
+                // 敵戦車（タイガー風シルエット）の描画
                 ctx.fillStyle = e.color || '#dc2626';
                 ctx.strokeStyle = e.enemyType === 'fast_turret' ? '#f0abfc' : (e.enemyType === 'fast_move' ? '#fef08a' : '#fca5a5');
                 ctx.lineWidth = 2;
-                ctx.fillRect(-e.radius, -e.radius, e.radius * 2, e.radius * 2);
-                ctx.strokeRect(-e.radius, -e.radius, e.radius * 2, e.radius * 2);
 
-                // Enemy Turret
+                // キャタピラ部（左右）
+                ctx.fillRect(-e.radius * 1.1, -e.radius, e.radius * 0.35, e.radius * 2);
+                ctx.fillRect(e.radius * 0.75, -e.radius, e.radius * 0.35, e.radius * 2);
+
+                // 車体中央部
+                ctx.fillRect(-e.radius * 0.8, -e.radius * 0.85, e.radius * 1.6, e.radius * 1.7);
+                ctx.strokeRect(-e.radius * 0.8, -e.radius * 0.85, e.radius * 1.6, e.radius * 1.7);
+
+                // 敵砲塔（回転）
+                ctx.save();
                 ctx.rotate(e.turretAngle);
                 ctx.fillStyle = '#7f1d1d';
-                ctx.fillRect(0, -4, e.radius * 1.3, 8);
+                ctx.fillRect(-e.radius * 0.3, -e.radius * 0.4, e.radius * 0.8, e.radius * 0.8); // 砲塔基部
+                ctx.fillRect(0, -5, e.radius * 1.5, 10); // 主砲
                 ctx.restore();
 
-                // Boss health bar
+                ctx.restore();
+
+                // ボス体力バー
                 if (e.isBoss) {
                     ctx.fillStyle = '#1e293b';
                     ctx.fillRect(e.x - 20, e.y - e.radius - 12, 40, 6);
@@ -870,27 +918,52 @@
                 }
             });
 
-            // 4. Draw Player Tank
+            // 4. Draw Player Tank (Tiger Style)
             if (player.x) {
                 ctx.save();
                 ctx.translate(player.x, player.y);
                 
-                // Hull
-                ctx.fillStyle = '#2563eb';
+                // キャタピラ（左右の重厚なサイドクローラー）
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(-player.radius * 1.1, -player.radius, player.radius * 0.35, player.radius * 2);
+                ctx.fillRect(player.radius * 0.75, -player.radius, player.radius * 0.35, player.radius * 2);
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(-player.radius * 1.1, -player.radius, player.radius * 0.35, player.radius * 2);
+                ctx.strokeRect(player.radius * 0.75, -player.radius, player.radius * 0.35, player.radius * 2);
+
+                // 車体本体（ミリタリーオリーブ・グレー・ブルー調の重装甲風）
+                ctx.fillStyle = '#1d4ed8';
                 ctx.strokeStyle = '#93c5fd';
                 ctx.lineWidth = 2;
-                ctx.fillRect(-player.radius, -player.radius, player.radius * 2, player.radius * 2);
-                ctx.strokeRect(-player.radius, -player.radius, player.radius * 2, player.radius * 2);
+                ctx.fillRect(-player.radius * 0.8, -player.radius * 0.85, player.radius * 1.6, player.radius * 1.7);
+                ctx.strokeRect(-player.radius * 0.8, -player.radius * 0.85, player.radius * 1.6, player.radius * 1.7);
 
-                // Treads detail
-                ctx.fillStyle = '#1d4ed8';
-                ctx.fillRect(-player.radius, -player.radius, 6, player.radius * 2);
-                ctx.fillRect(player.radius - 6, -player.radius, 6, player.radius * 2);
+                // 装甲プレートのディテール（ドイツ戦車風分割線）
+                ctx.beginPath();
+                ctx.moveTo(-player.radius * 0.8, 0); ctx.lineTo(player.radius * 0.8, 0);
+                ctx.strokeStyle = '#1e40af';
+                ctx.stroke();
 
-                // Rotating Turret
+                // 回転砲塔 & タイガー型太い主砲
                 ctx.rotate(player.turretAngle);
+                // 砲塔ベース（キューポラ付きの無骨な八角・四角形風）
+                ctx.fillStyle = '#3b82f6';
+                ctx.fillRect(-player.radius * 0.4, -player.radius * 0.45, player.radius * 0.9, player.radius * 0.9);
+                ctx.strokeStyle = '#93c5fd';
+                ctx.strokeRect(-player.radius * 0.4, -player.radius * 0.45, player.radius * 0.9, player.radius * 0.9);
+                
+                // キューポラ（車長用キューポラを小さな正方形で表現）
+                ctx.fillStyle = '#1d4ed8';
+                ctx.fillRect(-player.radius * 0.15, -player.radius * 0.2, player.radius * 0.3, player.radius * 0.3);
+
+                // 太く長い主砲（88mm砲イメージ）
                 ctx.fillStyle = '#60a5fa';
-                ctx.fillRect(0, -5, player.radius * 1.4, 10);
+                ctx.fillRect(0, -6, player.radius * 1.6, 12);
+                // マズルブレーキ（先端の太い部分）
+                ctx.fillStyle = '#93c5fd';
+                ctx.fillRect(player.radius * 1.3, -7, player.radius * 0.3, 14);
+
                 ctx.restore();
             }
 
