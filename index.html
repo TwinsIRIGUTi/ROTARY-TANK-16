@@ -282,7 +282,7 @@
         const TILE_EMPTY = 0;
         const TILE_WALL = 1;
         const TILE_DESTRUCT = 2;
-        const TILE_ICE = 3;
+        const TILE_ICE = 3; // Now represents Ice Wall (3 hits to break)
 
         const TOTAL_NORMAL_STAGES = 16;
         const TOTAL_EX_STAGES = 16;
@@ -292,6 +292,7 @@
         let canvas, ctx;
         let tileSize = 40;
         let mapGrid = [];
+        let mapHpGrid = []; // Tracks HP for destructible blocks or ice walls
         let gameState = 'TITLE'; // TITLE, PLAYING, PAUSED, CLEAR, GAMEOVER
         let gameMode = 'normal'; // 'normal' or 'ex'
         let currentStage = 1;
@@ -427,6 +428,7 @@
 
             // Define 10x10 stage layout
             mapGrid = Array.from({ length: 10 }, () => Array(10).fill(TILE_EMPTY));
+            mapHpGrid = Array.from({ length: 10 }, () => Array(10).fill(0));
 
             // Populate indestructible walls around borders
             for (let i = 0; i < 10; i++) {
@@ -463,10 +465,10 @@
             }
 
             if (stageNum >= 5) {
-                mapGrid[2][3] = TILE_ICE;
-                mapGrid[2][6] = TILE_ICE;
-                mapGrid[7][3] = TILE_ICE;
-                mapGrid[7][6] = TILE_ICE;
+                mapGrid[2][3] = TILE_ICE; mapHpGrid[2][3] = 3;
+                mapGrid[2][6] = TILE_ICE; mapHpGrid[2][6] = 3;
+                mapGrid[7][3] = TILE_ICE; mapHpGrid[7][3] = 3;
+                mapGrid[7][6] = TILE_ICE; mapHpGrid[7][6] = 3;
             }
 
             // Ensure player spawn area is clear (1,1 to 2,2)
@@ -561,6 +563,12 @@
             if (tile === TILE_DESTRUCT) {
                 mapGrid[r][c] = TILE_EMPTY;
                 return 'destruct';
+            } else if (tile === TILE_ICE) {
+                mapHpGrid[r][c]--;
+                if (mapHpGrid[r][c] <= 0) {
+                    mapGrid[r][c] = TILE_EMPTY;
+                }
+                return 'ice_hit';
             } else if (tile === TILE_WALL) {
                 let prevX = b.x - b.vx * 2;
                 let prevY = b.y - b.vy * 2;
@@ -726,8 +734,8 @@
                 }
 
                 let col = checkBulletCollisionAndBounce(b);
-                if (col === 'destruct') {
-                    createParticles(b.x, b.y, '#f59e0b', 8);
+                if (col === 'destruct' || col === 'ice_hit') {
+                    createParticles(b.x, b.y, col === 'ice_hit' ? '#38bdf8' : '#f59e0b', col === 'ice_hit' ? 5 : 8);
                     sound.playExplosion();
                     bullets.splice(i, 1);
                     continue;
@@ -782,7 +790,7 @@
         }
 
         function fireBullet(x, y, angle, isPlayer) {
-            const speed = isPlayer ? 3.8 : 2.6; // Reduced player bullet speed from 5 to 3.8, enemy from 3.5 to 2.6
+            const speed = isPlayer ? 3.4 : 2.3; // Slightly slower bullet speeds as requested
             bullets.push({
                 x: x + Math.cos(angle) * 16,
                 y: y + Math.sin(angle) * 16,
@@ -844,10 +852,14 @@
                         ctx.fillStyle = '#b45309';
                         ctx.fillRect(x + 3, y + 3, tileSize - 6, tileSize - 6);
                     } else if (tile === TILE_ICE) {
-                        ctx.fillStyle = '#38bdf8';
+                        // Render Ice Wall with visual indication of HP
+                        ctx.fillStyle = '#0284c7';
                         ctx.fillRect(x, y, tileSize, tileSize);
-                        ctx.fillStyle = '#7dd3fc';
-                        ctx.fillRect(x + 4, y + 4, tileSize - 8, tileSize - 8);
+                        ctx.fillStyle = '#38bdf8';
+                        ctx.fillRect(x + 3, y + 3, tileSize - 6, tileSize - 6);
+                        ctx.fillStyle = '#e0f2fe';
+                        ctx.font = '10px sans-serif';
+                        ctx.fillText(mapHpGrid[r][c], x + tileSize / 2 - 3, y + tileSize / 2 + 4);
                     }
                 }
             }
