@@ -80,7 +80,7 @@
         <header id="hud" class="bg-slate-950 border-b-4 border-slate-700 px-4 py-2 flex flex-wrap items-center justify-between text-xs sm:text-sm font-bold z-30">
             <div class="flex items-center space-x-3">
                 <span id="hud-mode" class="px-2 py-1 rounded bg-blue-900 text-blue-200 border border-blue-500 retro-font text-[10px]">NORMAL</span>
-                <span class="text-slate-400">STAGE: <span id="hud-stage" class="text-yellow-400 retro-font">01/32</span></span>
+                <span class="text-slate-400">STAGE: <span id="hud-stage" class="text-yellow-400 retro-font">01/16</span></span>
             </div>
             <div class="flex items-center space-x-4">
                 <span class="text-slate-400">DEATHS: <span id="hud-deaths" class="text-red-400 retro-font">0</span></span>
@@ -120,7 +120,7 @@
             <!-- 2. STAGE SELECT SCREEN -->
             <div id="screen-stages" class="absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center z-30 p-4 hidden">
                 <h2 class="retro-font text-xl text-yellow-400 mb-4">SELECT STAGE</h2>
-                <div id="stage-grid" class="grid grid-cols-8 gap-2 max-h-96 overflow-y-auto p-2 bg-slate-900 border-2 border-slate-700 rounded mb-4 w-full max-w-2xl">
+                <div id="stage-grid" class="grid grid-cols-4 sm:grid-cols-8 gap-2 max-h-96 overflow-y-auto p-2 bg-slate-900 border-2 border-slate-700 rounded mb-4 w-full max-w-2xl">
                     <!-- Dynamic stage buttons populated by JS -->
                 </div>
                 <button onclick="backToTitle()" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded retro-font text-xs border border-slate-500">BACK TO TITLE</button>
@@ -362,6 +362,7 @@
         let playerDeaths = 0;
         let playTimeSeconds = 0;
         let timerInterval = null;
+        const TOTAL_STAGES_PER_MODE = 16;
 
         // Map layout & entities
         let gridCols = 10;
@@ -375,35 +376,7 @@
 
         // Input state
         const keys = { w: false, a: false, s: false, d: false, up: false, left: false, down: false, right: false };
-        let joystickActive = false;
-        let joystickVector = { x: 0, y: 0 };
-
-        window.onload = function() {
-            canvas = document.getElementById('gameCanvas');
-            ctx = canvas.getContext('2d');
-            
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-            
-            initInputs();
-            updateEXButton();
-            buildStageGridUI();
-            
-            // Start render loop
-            requestAnimationFrame(gameLoop);
-        };
-
-        function resizeCanvas() {
-            const container = document.getElementById('screen-area');
-            const w = container.clientWidth;
-            const h = container.clientHeight;
-            const size = Math.min(w, h, 600);
-            canvas.width = size;
-            canvas.height = size;
-            tileSize = size / 10;
-        }
-
-        // Procedural/Predefined Stage Generator for 32 Stages
+        // Procedural/Predefined Stage Generator for 16 Stages per Mode
         function loadStage(stageNum, mode) {
             currentStageIndex = stageNum;
             currentMode = mode;
@@ -423,11 +396,11 @@
                     } else {
                         // Pattern variants based on stage number
                         let pattern = (stageNum + r * 3 + c * 7) % 17;
-                        if (stageNum > 8 && pattern === 3) {
+                        if (stageNum > 4 && pattern === 3) {
                             row.push(TILE_WALL);
                         } else if (pattern === 5 || pattern === 11) {
                             row.push(TILE_DESTRUCT);
-                        } else if (stageNum > 16 && pattern === 8) {
+                        } else if (stageNum > 8 && pattern === 8) {
                             row.push(TILE_ICE);
                         } else {
                             row.push(TILE_EMPTY);
@@ -456,14 +429,40 @@
                 vy: 0
             };
 
-            // Spawn Enemies (Count increases with stage, Boss every 8 stages)
+            // Spawn Enemies (Boss every 8 stages, enemy type variety from stage 5+)
             let isBossStage = (stageNum % 8 === 0);
-            let enemyCount = isBossStage ? 1 : Math.min(1 + Math.floor(stageNum / 3), 6);
+            let enemyCount = isBossStage ? 1 : Math.min(1 + Math.floor(stageNum / 3), 5);
 
             for (let i = 0; i < enemyCount; i++) {
                 let ex = (8 - i * 2) * tileSize + tileSize/2;
                 let ey = (1 + (i % 3)) * tileSize + tileSize/2;
                 let isBoss = isBossStage && i === 0;
+
+                // Stage progression: Enemy types
+                // Normal Enemy, Fast Turret Enemy (Mid-stage), Fast Mobile Enemy (Late-stage)
+                let enemyType = 'normal';
+                if (!isBoss && stageNum >= 5) {
+                    if (i % 2 === 1 || stageNum >= 12) {
+                        enemyType = (i % 2 === 0) ? 'fast_turret' : 'fast_move';
+                    }
+                }
+
+                let turretSpeed = (Math.random() - 0.5) * 0.04;
+                let moveSpeed = 1.5;
+                let enemyColor = '#dc2626';
+
+                if (enemyType === 'fast_turret') {
+                    turretSpeed = (Math.random() > 0.5 ? 1 : -1) * 0.09; // Rapid turret rotation
+                    enemyColor = '#a855f7'; // Purple
+                } else if (enemyType === 'fast_move') {
+                    moveSpeed = 2.6; // High movement speed
+                    enemyColor = '#eab308'; // Yellow
+                }
+
+                if (mode === 'ex') {
+                    turretSpeed *= 1.3;
+                    moveSpeed *= 1.2;
+                }
 
                 enemies.push({
                     x: ex,
@@ -471,20 +470,22 @@
                     radius: isBoss ? tileSize * 0.48 : tileSize * 0.35,
                     angle: Math.random() * Math.PI * 2,
                     turretAngle: Math.random() * Math.PI * 2,
-                    turretSpeed: (Math.random() - 0.5) * 0.04,
+                    turretSpeed: turretSpeed,
                     shootCooldown: Math.random() * 100,
-                    shootInterval: isBoss ? 90 : (mode === 'ex' ? 110 : 160),
-                    speed: isBoss ? 1.2 : 1.5,
-                    hp: isBoss ? (15 + stageNum) : (mode === 'ex' ? 3 : 1),
-                    maxHp: isBoss ? (15 + stageNum) : (mode === 'ex' ? 3 : 1),
+                    shootInterval: isBoss ? 90 : (mode === 'ex' ? 110 : 150),
+                    speed: isBoss ? 1.2 : moveSpeed,
+                    hp: isBoss ? (12 + stageNum * 2) : (mode === 'ex' ? 3 : 1),
+                    maxHp: isBoss ? (12 + stageNum * 2) : (mode === 'ex' ? 3 : 1),
                     isBoss: isBoss,
+                    enemyType: enemyType,
+                    color: isBoss ? '#b91c1c' : enemyColor,
                     moveTimer: 0,
                     dirX: 0,
                     dirY: 0
                 });
             }
 
-            document.getElementById('hud-stage').innerText = `${String(stageNum).padStart(2, '0')}/32`;
+            document.getElementById('hud-stage').innerText = `${String(stageNum).padStart(2, '0')}/${TOTAL_STAGES_PER_MODE}`;
             document.getElementById('hud-mode').innerText = mode.toUpperCase();
             document.getElementById('hud-mode').className = `px-2 py-1 rounded text-[10px] retro-font ${mode === 'ex' ? 'bg-red-900 text-red-200 border border-red-500' : 'bg-blue-900 text-blue-200 border border-blue-500'}`;
             
@@ -848,15 +849,15 @@
                 ctx.translate(e.x, e.y);
                 
                 // Enemy body (SFC sprite style)
-                ctx.fillStyle = e.isBoss ? '#b91c1c' : '#dc2626';
-                ctx.strokeStyle = '#fca5a5';
+                ctx.fillStyle = e.color || '#dc2626';
+                ctx.strokeStyle = e.enemyType === 'fast_turret' ? '#f0abfc' : (e.enemyType === 'fast_move' ? '#fef08a' : '#fca5a5');
                 ctx.lineWidth = 2;
                 ctx.fillRect(-e.radius, -e.radius, e.radius * 2, e.radius * 2);
                 ctx.strokeRect(-e.radius, -e.radius, e.radius * 2, e.radius * 2);
 
                 // Enemy Turret
                 ctx.rotate(e.turretAngle);
-                ctx.fillStyle = '#991b1b';
+                ctx.fillStyle = '#7f1d1d';
                 ctx.fillRect(0, -4, e.radius * 1.3, 8);
                 ctx.restore();
 
@@ -904,7 +905,10 @@
         function startGame(mode) {
             soundEngine.init();
             currentMode = mode;
-            let startStage = currentMode === 'ex' ? 1 : Math.min(maxUnlockedStage, 32);
+            let startStage = 1;
+            if (currentMode === 'normal') {
+                startStage = Math.min(maxUnlockedStage, TOTAL_STAGES_PER_MODE);
+            }
             loadStage(startStage, currentMode);
             
             document.getElementById('screen-title').classList.add('hidden');
@@ -953,11 +957,11 @@
             document.getElementById('screen-clear').classList.remove('hidden');
 
             if (currentMode === 'normal') {
-                if (currentStageIndex >= maxUnlockedStage && maxUnlockedStage < 32) {
+                if (currentStageIndex >= maxUnlockedStage && maxUnlockedStage < TOTAL_STAGES_PER_MODE) {
                     maxUnlockedStage = currentStageIndex + 1;
                     localStorage.setItem('tank16_unlocked', maxUnlockedStage);
                 }
-                if (currentStageIndex >= 32) {
+                if (currentStageIndex >= TOTAL_STAGES_PER_MODE) {
                     exUnlocked = true;
                     localStorage.setItem('tank16_ex_unlocked', 'true');
                     updateEXButton();
@@ -967,7 +971,7 @@
         }
 
         function nextStage() {
-            if (currentStageIndex < 32) {
+            if (currentStageIndex < TOTAL_STAGES_PER_MODE) {
                 loadStage(currentStageIndex + 1, currentMode);
                 document.getElementById('screen-clear').classList.add('hidden');
                 gameState = 'playing';
@@ -1023,7 +1027,7 @@
 
         function updateEXButton() {
             let btn = document.getElementById('btn-ex-mode');
-            if (exUnlocked || maxUnlockedStage >= 32) {
+            if (exUnlocked || maxUnlockedStage >= TOTAL_STAGES_PER_MODE) {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50', 'cursor-not-allowed');
                 btn.innerText = 'EX MODE (UNLOCKED)';
@@ -1033,7 +1037,7 @@
         function buildStageGridUI() {
             let grid = document.getElementById('stage-grid');
             grid.innerHTML = '';
-            for (let i = 1; i <= 32; i++) {
+            for (let i = 1; i <= TOTAL_STAGES_PER_MODE; i++) {
                 let unlocked = i <= maxUnlockedStage;
                 let btn = document.createElement('button');
                 btn.className = `py-2 rounded font-bold text-xs retro-font border ${unlocked ? 'bg-blue-900 hover:bg-blue-800 text-blue-200 border-blue-500 cursor-pointer' : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'}`;
